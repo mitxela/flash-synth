@@ -15,7 +15,9 @@ static void USART1_Init(void);
 static void Error_Handler(void);
 
 
-uint16_t buffer[] = {
+#define BUFFERSIZE 1024
+
+uint16_t buffer[BUFFERSIZE*2] = {
 
 //0,1000,0,1000,0,1000,0,1000};
 
@@ -54,21 +56,21 @@ uint16_t buffer[] = {
 
 
 
-uint16_t period = 0;
+float period = 0;
 
 uint8_t lastnote=0;
 
 void noteOn(uint8_t n) {
-  period =65535/pow(2.0, ((float)n)/12 );
+  period = pow(2.0, ((float)n -100)/12 );
 
-  //buffer[0]=(uint16_t)n;
+  //buffer[0]=(uint16_t)n *32;
 
 
   lastnote =n;
 }
 
 void noteOff(uint8_t n) {
-  if (lastnote==n) period = 0;
+  if (lastnote==n) period = 0.0;
 }
 
 
@@ -113,7 +115,64 @@ void USART1_IRQHandler(void) {
 
 
 
+#define PI 3.1415926535897
 
+void generateIntoBuffer(uint16_t* buf){
+
+//static uint16_t j=0;
+static float phase = 0;
+
+   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+
+     phase += period;
+     buf[i] = phase*500;//(uint16_t)(sin(phase)*1024+1024);
+     if (phase>2*PI) phase -= PI;
+
+
+  //    buf[i]++;
+   }
+
+//buf[5]+=++j;
+
+}
+
+
+
+void DMA1_Channel3_IRQHandler(void)
+{
+
+
+  DMA_HandleTypeDef *hdma = DacHandle.DMA_Handle1;
+  uint32_t flag_it = hdma->DmaBaseAddress->ISR;
+  uint32_t source_it = hdma->Instance->CCR;
+
+
+
+  // Half Transfer Complete Interrupt
+  if ((RESET != (flag_it & (DMA_FLAG_HT1 << hdma->ChannelIndex))) && (RESET != (source_it & DMA_IT_HT))) {
+    hdma->DmaBaseAddress->IFCR = (DMA_ISR_HTIF1 << hdma->ChannelIndex);  //Clear Flag
+
+    generateIntoBuffer(&buffer[0]);
+
+  }
+
+  // Transfer Complete Interrupt
+  else if ((RESET != (flag_it & (DMA_FLAG_TC1 << hdma->ChannelIndex))) && (RESET != (source_it & DMA_IT_TC))) {
+
+    hdma->DmaBaseAddress->IFCR = (DMA_ISR_TCIF1 << hdma->ChannelIndex);  //Clear Flag
+
+    generateIntoBuffer(&buffer[BUFFERSIZE]);
+// static uint16_t j=0;
+// buffer[BUFFERSIZE+3]+=j++;
+
+    __HAL_UNLOCK(hdma);
+
+  }
+
+
+  return;
+
+}
 
 
 
@@ -125,16 +184,18 @@ int main(void)
   HAL_Init();
   SystemClock_Config();
 
-  __HAL_RCC_GPIOH_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  GPIO_InitTypeDef GPIO_InitStruct;
-  GPIO_InitStruct.Pin = GPIO_PIN_0;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+   __HAL_RCC_GPIOA_CLK_ENABLE();
 
+
+  // __HAL_RCC_GPIOC_CLK_ENABLE();
+  // GPIO_InitTypeDef GPIO_InitStruct;
+  // GPIO_InitStruct.Pin = GPIO_PIN_0;
+  // GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  // GPIO_InitStruct.Pull = GPIO_NOPULL;
+  // GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  // HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  // HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_0);
 
   
   USART1_Init();
@@ -145,45 +206,28 @@ int main(void)
 
 
 
-
-
-
-
-  /*##-1- Initialize the DAC peripheral ######################################*/
   if (HAL_DAC_Init(&DacHandle) != HAL_OK)
-  {
-    /* Initialization Error */
     Error_Handler();
-  }
-
-  /*##-1- DAC channel1 Configuration #########################################*/
+  
   sConfig.DAC_Trigger = DAC_TRIGGER_T6_TRGO;
   sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
 
   if (HAL_DAC_ConfigChannel(&DacHandle, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-  {
-    /* Channel configuration Error */
     Error_Handler();
-  }
 
-  /*##-2- Enable DAC selected channel and associated DMA #############################*/
-  if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_1, (uint32_t *)buffer, 64, DAC_ALIGN_12B_R) != HAL_OK)
-  {
-    /* Start DMA Error */
+  if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_1, (uint32_t *)buffer, BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
     Error_Handler();
-  }
+  
 
 
 
   /* Infinite loop */
-  while (1)
-  {
+  while (1) {
 
-HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_0);
+
     if (period!=0) {
       
-      //HAL_Delay(1);
-    
+
       for (uint16_t i =0; i<period; i++){
         asm volatile("nop");
 
@@ -209,10 +253,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
   RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
   if(HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    /* Initialization Error */
-    while(1);
-  }
+    Error_Handler();
   
   RCC_ClkInitStruct.ClockType = (RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2);
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
@@ -220,17 +261,12 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;  
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;  
   if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
-  {
-    /* Initialization Error */
-    while(1);
-  }
+    Error_Handler();
 
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART1;
   PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK2;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
-  {
-    while(1);
-  }
+    Error_Handler();
 
 }
 
@@ -247,10 +283,9 @@ void USART1_Init(void) {
   huart1.Init.OverSampling = UART_OVERSAMPLING_16;
   huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
   huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+
   if (HAL_UART_Init(&huart1) != HAL_OK)
-  {
-    while(1);
-  }
+    Error_Handler();
 
   NVIC_SetPriority(USART1_IRQn, 0);
   NVIC_EnableIRQ(USART1_IRQn);

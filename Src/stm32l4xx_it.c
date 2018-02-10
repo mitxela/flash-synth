@@ -157,22 +157,6 @@ void SysTick_Handler(void)
   HAL_IncTick();
 }
 
-/******************************************************************************/
-/*                 STM32L4xx Peripherals Interrupt Handlers                   */
-/*  Add here the Interrupt Handler for the used peripheral(s) (PPP), for the  */
-/*  available peripheral interrupt handler's name please refer to the startup */
-/*  file (startup_stm32l4xx.s).                                               */
-/******************************************************************************/
-
-/**
-* @brief  This function handles DMA interrupt request.
-* @param  None
-* @retval None
-*/
-void DMA1_Channel3_IRQHandler(void)
-{
-  HAL_DMA_IRQHandler(DacHandle.DMA_Handle1);
-}
 
 /**
   * @}
