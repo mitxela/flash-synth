@@ -4,6 +4,8 @@
 #include "stm32l4xx_ll_usart.h"
 #include "math.h"
 
+#define PI 3.14159265358979323846
+
 DAC_HandleTypeDef    DacHandle;
 UART_HandleTypeDef   huart1;
 static DAC_ChannelConfTypeDef sConfig;
@@ -15,7 +17,7 @@ static void USART1_Init(void);
 static void Error_Handler(void);
 
 
-#define BUFFERSIZE 1024
+#define BUFFERSIZE 512
 
 uint16_t buffer[BUFFERSIZE*2] = {
 
@@ -56,21 +58,26 @@ uint16_t buffer[BUFFERSIZE*2] = {
 
 
 
-float period = 0;
+float coeff = 0;
 
 uint8_t lastnote=0;
 
 void noteOn(uint8_t n) {
-  period = pow(2.0, ((float)n -100)/12 );
+  //period = pow(2.0, ((float)n -100)/12 );
+
+
 
   //buffer[0]=(uint16_t)n *32;
 
+float frequency = pow(2.0, ((float)n -10)/12 );
+
+coeff = 2 * cos( 2 * PI * frequency );
 
   lastnote =n;
 }
 
 void noteOff(uint8_t n) {
-  if (lastnote==n) period = 0.0;
+  //if (lastnote==n) coeff = 0.0;
 }
 
 
@@ -115,19 +122,35 @@ void USART1_IRQHandler(void) {
 
 
 
-#define PI 3.1415926535897
+
 
 void generateIntoBuffer(uint16_t* buf){
 
 //static uint16_t j=0;
-static float phase = 0;
+//static float phase = 0;
+static float s1=1024.0, s2=0.0;
+float out=0;
 
    for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
-     phase += period;
-     buf[i] = phase*500;//(uint16_t)(sin(phase)*1024+1024);
-     if (phase>2*PI) phase -= PI;
+     //phase += period;
+     //buf[i] = phase*500;//(uint16_t)(sin(phase)*1024+1024);
+     //if (phase>2*PI) phase -= PI;
 
+    out = coeff * s1 - s2; 
+    s2 = s1;
+    s1 = out;
+    // out = coeff * s1 - s2; 
+    // s2 = s1;
+    // s1 = out;
+    // out = coeff * s1 - s2; 
+    // s2 = s1;
+    // s1 = out;
+    // out = coeff * s1 - s2; 
+    // s2 = s1;
+    // s1 = out;
+
+    buf[i] = (out+2048);
 
   //    buf[i]++;
    }
@@ -162,10 +185,7 @@ void DMA1_Channel3_IRQHandler(void)
     hdma->DmaBaseAddress->IFCR = (DMA_ISR_TCIF1 << hdma->ChannelIndex);  //Clear Flag
 
     generateIntoBuffer(&buffer[BUFFERSIZE]);
-// static uint16_t j=0;
-// buffer[BUFFERSIZE+3]+=j++;
 
-    __HAL_UNLOCK(hdma);
 
   }
 
@@ -225,14 +245,14 @@ int main(void)
   while (1) {
 
 
-    if (period!=0) {
+    // if (period!=0) {
       
 
-      for (uint16_t i =0; i<period; i++){
-        asm volatile("nop");
+      // for (uint16_t i =0; i<period; i++){
+        // asm volatile("nop");
 
-      }
-    }
+      // }
+    // }
   }
 }
 
@@ -311,7 +331,7 @@ void TIM6_Config(void)
   /* Time base configuration */
   htim.Instance = TIM6;
 
-  htim.Init.Period            = 1684; // (64MHz / 38kHz) -> 19kHz nyquist
+  htim.Init.Period            = 1451; // (64MHz / 44.1kHz)
   htim.Init.Prescaler         = 0;
   htim.Init.ClockDivision     = 0;
   htim.Init.CounterMode       = TIM_COUNTERMODE_UP;
