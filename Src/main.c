@@ -25,9 +25,7 @@ uint16_t buffer[BUFFERSIZE*2] = {0};
 struct channel {
   uint8_t volume;
   uint16_t bend;
-};
-
-struct channel channels[8];
+} channels[8];
 
 struct oscillator {
   struct channel * channel;
@@ -35,9 +33,7 @@ struct oscillator {
   float frequency;
   float phase;
   unsigned alive:1;
-};
-
-struct oscillator oscillators[8];
+} oscillators[8];
 
 
 
@@ -60,7 +56,7 @@ void noteOn(uint8_t n) {
 
   oscillators[i].alive = 1;
   oscillators[i].notenumber=n;
-  oscillators[i].frequency=pow(2.0, ((float)n -100)/12 );
+  //oscillators[i].frequency=;
 
 
 
@@ -74,7 +70,7 @@ void noteOff(uint8_t n) {
   for (uint8_t i=POLYPHONY; i--;) {
     if (oscillators[i].alive && oscillators[i].notenumber==n) {
       oscillators[i].alive=0;
-      oscillators[i].frequency=0;
+      //oscillators[i].frequency=0;
       break;
     }
   }
@@ -123,17 +119,19 @@ void USART1_IRQHandler(void) {
 }
 
 
-void doOscillator(struct oscillator * osc, uint16_t* buf){
+void doOscillator(struct oscillator* osc, uint16_t* buf){
+
+  float f = pow(2.0, ((float)osc->notenumber -100)/12 );
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
-    osc->phase += osc->frequency;
+    osc->phase += f;
 
     if (osc->phase>4.0f) osc->phase-=4.0f;
 
     if (osc->phase>2.0f) {
-      buf[i] += (4.0f - osc->phase)*100 +100;
+      buf[i] += (4.0f - osc->phase -1.0f)*350;
     } else {
-      buf[i] += osc->phase*100 +100;
+      buf[i] += (osc->phase -1.0f)*350;
     }
 
   }
@@ -145,7 +143,7 @@ void doOscillator(struct oscillator * osc, uint16_t* buf){
 void generateIntoBuffer(uint16_t* buf){
 
   //memset(buf, 0, BUFFERSIZE*sizeof(uint16_t));
-  for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=0;}
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048;}
 
   for (uint8_t i=POLYPHONY; i--;) {
     if (oscillators[i].alive)
@@ -154,9 +152,6 @@ void generateIntoBuffer(uint16_t* buf){
   }
 
 
-//  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
-
-//}
 
 
 
