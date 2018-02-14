@@ -25,10 +25,10 @@ uint16_t buffer[BUFFERSIZE*2] = {0};
 struct channel {
   uint8_t volume;
   uint16_t bend;
-} channels[8];
+} channels[16];
 
 struct oscillator {
-  struct channel * channel;
+  uint8_t channel;
   uint8_t notenumber;
   float frequency;
   float phase;
@@ -39,12 +39,9 @@ struct oscillator {
 
 
 
-float freq = 0;
 
 
-uint8_t lastnote=0;
-
-void noteOn(uint8_t n) {
+void noteOn(uint8_t n, uint8_t channel) {
 
 // find a free oscillator
 // set it up
@@ -56,26 +53,22 @@ void noteOn(uint8_t n) {
 
   oscillators[i].alive = 1;
   oscillators[i].notenumber=n;
-  //oscillators[i].frequency=;
+  oscillators[i].channel=channel;
 
 
-
-  lastnote =n;
 }
 
-void noteOff(uint8_t n) {
+void noteOff(uint8_t n, uint8_t channel) {
 // find oscillator with same channel and note number
 // kill it
 
   for (uint8_t i=POLYPHONY; i--;) {
-    if (oscillators[i].alive && oscillators[i].notenumber==n) {
+    if (oscillators[i].alive && oscillators[i].notenumber==n && oscillators[i].channel==channel) {
       oscillators[i].alive=0;
-      //oscillators[i].frequency=0;
       break;
     }
   }
 
-  //if (lastnote==n) oscillators[0].frequency= 0.0;
 }
 
 
@@ -92,20 +85,31 @@ void USART1_IRQHandler(void) {
     bytenumber = 1;
 
   } else {
-    if (bytenumber ==1) {
+    if (bytenumber == 1) {
       bytetwo = i;
-      bytenumber= 2;
-    } else if (bytenumber==2){
+      bytenumber = 2;
+    } else if (bytenumber == 2){
 
       switch (status & 0xF0) {
 
+        uint8_t chan = status&0x0F;
+
         case 0x90: //Note on
-          if (i == 0) noteOff(bytetwo);
-          else noteOn(bytetwo);
+          if (i == 0) noteOff(bytetwo, chan); //running status uses velocity=0 for noteoff
+          else noteOn(bytetwo, chan);
         break;
 
         case 0x80: //Note off
-          noteOff(bytetwo);
+          noteOff(bytetwo, chan);
+        break;
+
+        case 0xE0: //Pitch bend
+          channels[chan].bend = (i<<7) + bytetwo;
+        break;
+
+
+        case 0xB0: // Continuous controller
+
         break;
 
       }
@@ -121,7 +125,9 @@ void USART1_IRQHandler(void) {
 
 void doOscillator(struct oscillator* osc, uint16_t* buf){
 
-  float f = pow(2.0, ((float)osc->notenumber -100)/12 );
+  float bend = 2.0f - (float)channels[osc->channel].bend / (1<<12);
+
+  float f = pow(2.0, ((float)osc->notenumber -100 -bend)/12 );
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
     osc->phase += f;
@@ -142,7 +148,6 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
 
 void generateIntoBuffer(uint16_t* buf){
 
-  //memset(buf, 0, BUFFERSIZE*sizeof(uint16_t));
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048;}
 
   for (uint8_t i=POLYPHONY; i--;) {
@@ -196,8 +201,7 @@ void DMA1_Channel3_IRQHandler(void)
 
 
 
-int main(void)
-{
+int main(void) {
 
   HAL_Init();
   SystemClock_Config();
@@ -237,21 +241,8 @@ int main(void)
     Error_Handler();
   
 
-
-
   /* Infinite loop */
-  while (1) {
-
-
-    // if (period!=0) {
-      
-
-      // for (uint16_t i =0; i<period; i++){
-        // asm volatile("nop");
-
-      // }
-    // }
-  }
+  while (1);
 }
 
 void SystemClock_Config(void)
@@ -313,13 +304,6 @@ void USART1_Init(void) {
 }
 
 
-/**
-  * @brief  TIM6 Configuration
-  * @note   TIM6 configuration is based on APB1 frequency
-  * @note   TIM6 Update event occurs each TIM6CLK/256
-  * @param  None
-  * @retval None
-  */
 void TIM6_Config(void)
 {
   static TIM_HandleTypeDef  htim;
@@ -348,12 +332,6 @@ void TIM6_Config(void)
 
 
 
-
-/**
-  * @brief  This function is executed in case of error occurrence.
-  * @param  None
-  * @retval None
-  */
 static void Error_Handler(void)
 {
   while(1){} 
