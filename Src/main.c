@@ -17,6 +17,7 @@ static void Error_Handler(void);
 
 
 #define BUFFERSIZE 512
+#define POLYPHONY 12
 
 uint16_t buffer[BUFFERSIZE*2] = {0};
 
@@ -30,6 +31,7 @@ struct channel channels[8];
 
 struct oscillator {
   struct channel * channel;
+  uint8_t notenumber;
   float frequency;
   float phase;
   unsigned alive:1;
@@ -47,21 +49,37 @@ float freq = 0;
 uint8_t lastnote=0;
 
 void noteOn(uint8_t n) {
-  freq = pow(2.0, ((float)n -100)/12 );
+
+// find a free oscillator
+// set it up
+  uint8_t i;
+
+  for (i=POLYPHONY; i--;) {
+    if (0==oscillators[i].alive) break;
+  }
+
+  oscillators[i].alive = 1;
+  oscillators[i].notenumber=n;
+  oscillators[i].frequency=pow(2.0, ((float)n -100)/12 );
 
 
-
-  //buffer[0]=(uint16_t)n *32;
-
-// float frequency = pow(2.0, ((float)n -10)/12 );
-
-// coeff = 2 * cos( 2 * PI * frequency );
 
   lastnote =n;
 }
 
 void noteOff(uint8_t n) {
-  if (lastnote==n) freq = 0.0;
+// find oscillator with same channel and note number
+// kill it
+
+  for (uint8_t i=POLYPHONY; i--;) {
+    if (oscillators[i].alive && oscillators[i].notenumber==n) {
+      oscillators[i].alive=0;
+      oscillators[i].frequency=0;
+      break;
+    }
+  }
+
+  //if (lastnote==n) oscillators[0].frequency= 0.0;
 }
 
 
@@ -107,7 +125,18 @@ void USART1_IRQHandler(void) {
 
 void doOscillator(struct oscillator * osc, uint16_t* buf){
 
-  
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+    osc->phase += osc->frequency;
+
+    if (osc->phase>4.0f) osc->phase-=4.0f;
+
+    if (osc->phase>2.0f) {
+      buf[i] += (4.0f - osc->phase)*100 +100;
+    } else {
+      buf[i] += osc->phase*100 +100;
+    }
+
+  }
 
 
 }
@@ -115,36 +144,21 @@ void doOscillator(struct oscillator * osc, uint16_t* buf){
 
 void generateIntoBuffer(uint16_t* buf){
 
-  //static uint16_t j=0;
-  static float out = 0;
-  //static uint8_t dir=0;
+  //memset(buf, 0, BUFFERSIZE*sizeof(uint16_t));
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=0;}
+
+  for (uint8_t i=POLYPHONY; i--;) {
+    if (oscillators[i].alive)
+      doOscillator(&oscillators[i], buf);
+
+  }
 
 
+//  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
-  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
-
-    out += freq;
-    if (out>4.0f) out-=4.0f;
-
-    if (out>2.0f) {
-      buf[i] = (4.0f-out)*500 +500;
-    } else {
-      buf[i] = out*500 +500;
-    }
+//}
 
 
-    //(uint16_t)(sin(phase)*1024+1024);
-    //if (phase>2*PI) phase -= 2*PI;
-
-
-
-
-    //buf[i] = (out+2048);
-
-  //    buf[i]++;
-   }
-
-//buf[5]+=++j;
 
 }
 
