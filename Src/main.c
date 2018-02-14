@@ -24,7 +24,7 @@ uint16_t buffer[BUFFERSIZE*2] = {0};
 
 struct channel {
   uint8_t volume;
-  uint16_t bend;
+  float bend;
 } channels[16];
 
 struct oscillator {
@@ -41,7 +41,7 @@ struct oscillator {
 
 
 
-void noteOn(uint8_t n, uint8_t channel) {
+void noteOn(uint8_t n, uint8_t chan) {
 
 // find a free oscillator
 // set it up
@@ -53,17 +53,17 @@ void noteOn(uint8_t n, uint8_t channel) {
 
   oscillators[i].alive = 1;
   oscillators[i].notenumber=n;
-  oscillators[i].channel=channel;
+  oscillators[i].channel=chan;
 
 
 }
 
-void noteOff(uint8_t n, uint8_t channel) {
+void noteOff(uint8_t n, uint8_t chan) {
 // find oscillator with same channel and note number
 // kill it
 
   for (uint8_t i=POLYPHONY; i--;) {
-    if (oscillators[i].alive && oscillators[i].notenumber==n && oscillators[i].channel==channel) {
+    if (oscillators[i].alive && oscillators[i].notenumber==n && oscillators[i].channel==chan) {
       oscillators[i].alive=0;
       break;
     }
@@ -90,9 +90,9 @@ void USART1_IRQHandler(void) {
       bytenumber = 2;
     } else if (bytenumber == 2){
 
-      switch (status & 0xF0) {
+      uint8_t chan = status&0x0F;
 
-        uint8_t chan = status&0x0F;
+      switch (status & 0xF0) {
 
         case 0x90: //Note on
           if (i == 0) noteOff(bytetwo, chan); //running status uses velocity=0 for noteoff
@@ -104,7 +104,7 @@ void USART1_IRQHandler(void) {
         break;
 
         case 0xE0: //Pitch bend
-          channels[chan].bend = (i<<7) + bytetwo;
+            channels[chan].bend = 2.0f -(float)((i<<7) + bytetwo) / (1<<12) ;
         break;
 
 
@@ -125,9 +125,11 @@ void USART1_IRQHandler(void) {
 
 void doOscillator(struct oscillator* osc, uint16_t* buf){
 
-  float bend = 2.0f - (float)channels[osc->channel].bend / (1<<12);
-
-  float f = pow(2.0, ((float)osc->notenumber -100 -bend)/12 );
+  float f = pow(2.0, (
+      (float)osc->notenumber
+      - 100
+      - channels[osc->channel].bend
+    )/12 );
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
     osc->phase += f;
