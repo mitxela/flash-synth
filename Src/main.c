@@ -16,8 +16,10 @@ static void USART1_Init(void);
 static void Error_Handler(void);
 
 
-#define BUFFERSIZE 512
-#define POLYPHONY 12
+#define BUFFERSIZE 256
+#define POLYPHONY 16
+// To be absolutely sure it isn't going to clip, wave amplitude should be less than 2048/polyphony = 128...
+#define WAVE_AMPLITUDE 350
 
 uint16_t buffer[BUFFERSIZE*2] = {0};
 
@@ -25,6 +27,8 @@ uint16_t buffer[BUFFERSIZE*2] = {0};
 struct channel {
   uint8_t volume;
   float bend;
+  uint8_t RPNstack[4];
+  uint8_t pbSensitivity;
 } channels[16];
 
 struct oscillator {
@@ -33,7 +37,7 @@ struct oscillator {
   float frequency;
   float phase;
   unsigned alive:1;
-} oscillators[8];
+} oscillators[POLYPHONY];
 
 
 
@@ -104,12 +108,25 @@ void USART1_IRQHandler(void) {
         break;
 
         case 0xE0: //Pitch bend
-            channels[chan].bend = 2.0f -(float)((i<<7) + bytetwo) / (1<<12) ;
+          channels[chan].bend = channels[chan].pbSensitivity * ( 1.0f -(float)((i<<7) + bytetwo) / (1<<13) ) ;
         break;
 
 
         case 0xB0: // Continuous controller
 
+          switch (bytetwo) {
+
+            case 101: channels[chan].RPNstack[0]=i; break;
+            case 100: channels[chan].RPNstack[1]=i; break;
+            case 38:  channels[chan].RPNstack[3]=i; break; //not used yet
+            case 6:   channels[chan].RPNstack[2]=i; 
+              if (channels[chan].RPNstack[0]==0 && channels[chan].RPNstack[1]==0) {//Pitch bend sensitivity
+                // should this be limited to 24 ?
+                channels[chan].pbSensitivity = i;
+              }
+            break;
+
+          }
         break;
 
       }
@@ -125,9 +142,16 @@ void USART1_IRQHandler(void) {
 
 void doOscillator(struct oscillator* osc, uint16_t* buf){
 
-  float f = pow(2.0, (
+/*
+  with timer period 1451, sysclk 64MHz, real samplerate is 44107.51206
+
+  f_a = (4*440) / fs = 4*440/(64M/1451) = 4*440*1451/64e6 = 0.0399025
+
+*/
+
+  float f = 0.0399025 * pow(2.0, (
       (float)osc->notenumber
-      - 100
+      - 69
       - channels[osc->channel].bend
     )/12 );
 
@@ -137,9 +161,9 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
     if (osc->phase>4.0f) osc->phase-=4.0f;
 
     if (osc->phase>2.0f) {
-      buf[i] += (4.0f - osc->phase -1.0f)*350;
+      buf[i] += (4.0f - osc->phase -1.0f)*WAVE_AMPLITUDE;
     } else {
-      buf[i] += (osc->phase -1.0f)*350;
+      buf[i] += (osc->phase -1.0f)*WAVE_AMPLITUDE;
     }
 
   }
@@ -242,6 +266,9 @@ int main(void) {
   if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_1, (uint32_t *)buffer, BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
     Error_Handler();
   
+
+  for (uint8_t i=16;i--;) channels[i].pbSensitivity = 2;
+
 
   /* Infinite loop */
   while (1);

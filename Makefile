@@ -8,7 +8,7 @@ TARGET = L476-1
 # building variables
 ######################################
 # debug build?
-DEBUG = 1
+DEBUG = 0
 # optimization
 OPT = -O3
 
@@ -20,13 +20,7 @@ OPT = -O3
 SOURCES_DIR =  \
 Drivers/CMSIS \
 Drivers \
-Drivers/STM32L4xx_HAL_Driver \
-Application/User \
-Application/MAKEFILE \
-Application
-
-# firmware library path
-PERIFLIB_PATH = 
+Drivers/STM32L4xx_HAL_Driver 
 
 # Build path
 BUILD_DIR = build
@@ -65,12 +59,6 @@ Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_pwr_ex.c \
 # ASM sources
 ASM_SOURCES =  \
 startup_stm32l476xx.s
-
-
-######################################
-# firmware library
-######################################
-PERIFLIB_SOURCES = 
 
 
 #######################################
