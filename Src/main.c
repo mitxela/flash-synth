@@ -19,7 +19,7 @@ static void Error_Handler(void);
 #define BUFFERSIZE 256
 #define POLYPHONY 16
 // To be absolutely sure it isn't going to clip, wave amplitude should be less than 2048/polyphony = 128...
-#define WAVE_AMPLITUDE 350
+#define WAVE_AMPLITUDE 128
 
 uint16_t buffer[BUFFERSIZE*2] = {0};
 
@@ -69,7 +69,7 @@ void noteOff(uint8_t n, uint8_t chan) {
 // kill it
 
   for (uint8_t i=POLYPHONY; i--;) {
-    if (oscillators[i].alive && oscillators[i].notenumber==n && oscillators[i].channel==chan) {
+    if (oscillators[i].alive && !oscillators[i].released && oscillators[i].notenumber==n && oscillators[i].channel==chan) {
       //oscillators[i].alive=0;
       oscillators[i].released=1;
       break;
@@ -161,15 +161,11 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
     osc->phase += f;
 
-    // if (osc->released) {
-      // osc->amplitude*=0.99;
-      // if (osc->amplitude < 0.01) osc->alive =0;
-    // } else osc->amplitude= osc->amplitude * 0.99 + WAVE_AMPLITUDE*0.01;
-
+    //Simple envelope
     if (osc->released) {
-      osc->amplitude-=0.5;
-      if (osc->amplitude == 0) osc->alive =0;
-    } else if (osc->amplitude<WAVE_AMPLITUDE) osc->amplitude+=0.5;
+      osc->amplitude-=0.125;
+      if (osc->amplitude <= 0) osc->alive =0;
+    } else if (osc->amplitude<WAVE_AMPLITUDE) osc->amplitude+=0.25;
 
 
     if (osc->phase>4.0f) osc->phase-=4.0f;
