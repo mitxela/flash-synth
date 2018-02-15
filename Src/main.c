@@ -34,9 +34,10 @@ struct channel {
 struct oscillator {
   uint8_t channel;
   uint8_t notenumber;
-  float frequency;
   float phase;
+  float amplitude;
   unsigned alive:1;
+  unsigned released:1;
 } oscillators[POLYPHONY];
 
 
@@ -56,6 +57,7 @@ void noteOn(uint8_t n, uint8_t chan) {
   }
 
   oscillators[i].alive = 1;
+  oscillators[i].released = 0;
   oscillators[i].notenumber=n;
   oscillators[i].channel=chan;
 
@@ -68,7 +70,8 @@ void noteOff(uint8_t n, uint8_t chan) {
 
   for (uint8_t i=POLYPHONY; i--;) {
     if (oscillators[i].alive && oscillators[i].notenumber==n && oscillators[i].channel==chan) {
-      oscillators[i].alive=0;
+      //oscillators[i].alive=0;
+      oscillators[i].released=1;
       break;
     }
   }
@@ -158,12 +161,23 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
     osc->phase += f;
 
+    // if (osc->released) {
+      // osc->amplitude*=0.99;
+      // if (osc->amplitude < 0.01) osc->alive =0;
+    // } else osc->amplitude= osc->amplitude * 0.99 + WAVE_AMPLITUDE*0.01;
+
+    if (osc->released) {
+      osc->amplitude-=0.5;
+      if (osc->amplitude == 0) osc->alive =0;
+    } else if (osc->amplitude<WAVE_AMPLITUDE) osc->amplitude+=0.5;
+
+
     if (osc->phase>4.0f) osc->phase-=4.0f;
 
     if (osc->phase>2.0f) {
-      buf[i] += (4.0f - osc->phase -1.0f)*WAVE_AMPLITUDE;
+      buf[i] += (4.0f - osc->phase -1.0f)*osc->amplitude;
     } else {
-      buf[i] += (osc->phase -1.0f)*WAVE_AMPLITUDE;
+      buf[i] += (osc->phase -1.0f)*osc->amplitude;
     }
 
   }
