@@ -29,6 +29,7 @@ struct channel {
   float bend;
   uint8_t RPNstack[4];
   uint8_t pbSensitivity;
+  unsigned sustain:1;
 } channels[16];
 
 struct oscillator {
@@ -38,13 +39,14 @@ struct oscillator {
   float amplitude;
   unsigned alive:1;
   unsigned released:1;
+  unsigned sustained:1;
 } oscillators[POLYPHONY];
 
 
 
 
 
-
+  
 
 void noteOn(uint8_t n, uint8_t chan) {
 
@@ -60,6 +62,7 @@ void noteOn(uint8_t n, uint8_t chan) {
   oscillators[i].released = 0;
   oscillators[i].notenumber=n;
   oscillators[i].channel=chan;
+  oscillators[i].phase = 1.0f;
 
 
 }
@@ -69,9 +72,12 @@ void noteOff(uint8_t n, uint8_t chan) {
 // kill it
 
   for (uint8_t i=POLYPHONY; i--;) {
-    if (oscillators[i].alive && !oscillators[i].released && oscillators[i].notenumber==n && oscillators[i].channel==chan) {
-      //oscillators[i].alive=0;
-      oscillators[i].released=1;
+    if (oscillators[i].alive && !oscillators[i].released && oscillators[i].notenumber==n && oscillators[i].channel==chan && !oscillators[i].sustained) {
+      if (channels[chan].sustain) {
+        oscillators[i].sustained=1;
+      } else {
+        oscillators[i].released=1;
+      }
       break;
     }
   }
@@ -118,6 +124,19 @@ void USART1_IRQHandler(void) {
         case 0xB0: // Continuous controller
 
           switch (bytetwo) {
+
+            case 64: //sustain pedal
+              channels[chan].sustain = (i>63);
+              if (channels[chan].sustain == 0) {//pedal released
+                //loop through oscillators and release any with sustained=true
+                for (uint8_t i=POLYPHONY; i--;) {
+                  if (oscillators[i].sustained && oscillators[i].alive && !oscillators[i].released && oscillators[i].channel==chan) {
+                    oscillators[i].released=1;
+                    oscillators[i].sustained=0;
+                  }
+                }
+              }
+            break;
 
             case 101: channels[chan].RPNstack[0]=i; break;
             case 100: channels[chan].RPNstack[1]=i; break;
