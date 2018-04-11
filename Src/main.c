@@ -6,6 +6,8 @@
 
 #define PI 3.14159265358979323846
 
+#include "lookupTables.h"
+
 DAC_HandleTypeDef    DacHandle;
 UART_HandleTypeDef   huart1;
 static DAC_ChannelConfTypeDef sConfig;
@@ -26,7 +28,7 @@ uint16_t buffer[BUFFERSIZE*2] = {0};
 
 struct channel {
   uint8_t volume;
-  float bend;
+  int32_t bend;
   uint8_t RPNstack[4];
   uint8_t pbSensitivity;
   unsigned sustain:1;
@@ -44,10 +46,6 @@ struct oscillator {
 } oscillators[POLYPHONY];
 
 uint32_t timestamp = 0;
-
-
-
-  
 
 void noteOn(uint8_t n, uint8_t chan) {
 
@@ -128,7 +126,8 @@ void USART1_IRQHandler(void) {
         break;
 
         case 0xE0: //Pitch bend
-          channels[chan].bend = channels[chan].pbSensitivity * ( 1.0f -(float)((i<<7) + bytetwo) / (1<<13) ) ;
+          //channels[chan].bend = channels[chan].pbSensitivity * ( 1.0f -(float)((i<<7) + bytetwo) / (1<<13) ) ;
+          channels[chan].bend = channels[chan].pbSensitivity * (((i<<7) + bytetwo) - 0x2000);
         break;
 
 
@@ -182,11 +181,18 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
 
 */
 
+/*
   float f = 0.0399025 * pow(2.0, (
       (float)osc->notenumber
       - 69
       - channels[osc->channel].bend
     )/12 );
+*/
+
+  //int32_t b = channels[osc->channel].bend * channels[osc->channel].pbSensitivity ;
+
+  float f = fEqualLookup[ osc->notenumber + (channels[osc->channel].bend/0x2000) ] 
+          * bLookup14bit1semitone[ (channels[osc->channel].bend%0x2000) +0x2000 ];
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
     osc->phase += f;
@@ -307,7 +313,10 @@ int main(void) {
     Error_Handler();
   
 
-  for (uint8_t i=16;i--;) channels[i].pbSensitivity = 2;
+  for (uint8_t i=16;i--;) {
+  //  channels[i].bend=0x2000;
+    channels[i].pbSensitivity = 2;
+  };
 
 
   /* Infinite loop */
