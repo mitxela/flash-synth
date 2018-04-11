@@ -71,7 +71,7 @@ void noteOn(uint8_t n, uint8_t chan) {
   oscillators[i].released = 0;
   oscillators[i].notenumber=n;
   oscillators[i].channel=chan;
-  oscillators[i].phase = 1.0f;
+  //oscillators[i].phase = 1.0f;
 
 
 }
@@ -199,8 +199,8 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
 
     //Simple envelope
     if (osc->released) {
-      osc->amplitude-=0.125;
-      if (osc->amplitude <= 0) osc->alive =0;
+      osc->amplitude-=0.25;
+      if (osc->amplitude <= 0.0) {osc->alive =0;osc->amplitude=0;}
     } else if (osc->amplitude<WAVE_AMPLITUDE) osc->amplitude+=0.25;
 
 
