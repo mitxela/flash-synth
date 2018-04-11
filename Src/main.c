@@ -37,12 +37,13 @@ struct oscillator {
   uint8_t notenumber;
   float phase;
   float amplitude;
+  uint32_t starttime;
   unsigned alive:1;
   unsigned released:1;
   unsigned sustained:1;
 } oscillators[POLYPHONY];
 
-
+uint32_t timestamp = 0;
 
 
 
@@ -52,13 +53,23 @@ void noteOn(uint8_t n, uint8_t chan) {
 
 // find a free oscillator
 // set it up
-  uint8_t i;
+  uint8_t i, oldest;
+  uint32_t mintime=0xffffffff;
 
   for (i=POLYPHONY; i--;) {
     if (0==oscillators[i].alive) break;
+    if (oscillators[i].starttime < mintime) {
+      oldest = i;
+      mintime = oscillators[i].starttime;
+    }
+  }
+
+  if (oscillators[i].alive!=0) {
+    i = oldest;
   }
 
   oscillators[i].alive = 1;
+  oscillators[i].starttime = timestamp++;
   oscillators[i].released = 0;
   oscillators[i].notenumber=n;
   oscillators[i].channel=chan;
