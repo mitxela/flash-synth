@@ -206,11 +206,15 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
 
     if (osc->phase>4.0f) osc->phase-=4.0f;
 
-    if (osc->phase>2.0f) {
-      buf[i] += (4.0f - osc->phase -1.0f)*osc->amplitude;
-    } else {
-      buf[i] += (osc->phase -1.0f)*osc->amplitude;
-    }
+    // if (osc->phase>2.0f) {
+      // buf[i] += (4.0f - osc->phase -1.0f)*osc->amplitude;
+    // } else {
+      // buf[i] += (osc->phase -1.0f)*osc->amplitude;
+    // }
+
+    //sinLut is 8192 
+    //phase is 0 to 4 -> *2048
+    buf[i] += sinLut[(int)(osc->phase *2048)] * osc->amplitude;
 
   }
 
