@@ -74,6 +74,7 @@ void noteOn(uint8_t n, uint8_t chan) {
   oscillators[i].alive = 1;
   oscillators[i].starttime = timestamp++;
   oscillators[i].released = 0;
+  oscillators[i].sustained = 0;
   oscillators[i].notenumber=n;
   oscillators[i].channel=chan;
 
