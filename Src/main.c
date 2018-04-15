@@ -25,6 +25,9 @@ static void Error_Handler(void);
 
 uint16_t buffer[BUFFERSIZE*2] = {0};
 
+  float fm_freq = 0.1;
+  float fm_depth = 0.5;
+  float fm_decay = 0.9999;
 
 struct channel {
   uint8_t volume;
@@ -39,6 +42,8 @@ struct oscillator {
   uint8_t notenumber;
   float phase;
   float amplitude;
+  float fm_phase;
+  float fm_amplitude;
   uint32_t starttime;
   unsigned alive:1;
   unsigned released:1;
@@ -71,6 +76,8 @@ void noteOn(uint8_t n, uint8_t chan) {
   oscillators[i].released = 0;
   oscillators[i].notenumber=n;
   oscillators[i].channel=chan;
+
+  oscillators[i].fm_amplitude=fm_depth;
   //oscillators[i].phase = 1.0f;
 
 
@@ -135,6 +142,16 @@ void USART1_IRQHandler(void) {
 
           switch (bytetwo) {
 
+            case 20:
+              fm_freq=(float)(i)/32;
+            break;
+            case 21:
+              fm_depth=(float)(i)/127;
+            break;
+            case 22:
+              fm_decay=0.999 + ((float)(i)/127000);
+            break;
+
             case 64: //sustain pedal
               channels[chan].sustain = (i>63);
               if (channels[chan].sustain == 0) {//pedal released
@@ -195,7 +212,6 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
           * bLookup14bit1semitone[ (channels[osc->channel].bend%0x2000) +0x2000 ];
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
-    osc->phase += f;
 
     //Simple envelope
     if (osc->released) {
@@ -204,7 +220,16 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
     } else if (osc->amplitude<WAVE_AMPLITUDE) osc->amplitude+=0.25;
 
 
-    if (osc->phase>4.0f) osc->phase-=4.0f;
+    osc->fm_phase += fm_freq*f;
+    if (osc->fm_phase>4.0f) osc->fm_phase-=4.0f;
+
+
+    osc->fm_amplitude *= fm_decay;
+
+    osc->phase += f  + sinLut[(int)(osc->fm_phase *2048)]*osc->fm_amplitude;
+    while (osc->phase>4.0f) osc->phase-=4.0f;
+    while (osc->phase<0.0f) osc->phase+=4.0f;
+
 
     // if (osc->phase>2.0f) {
       // buf[i] += (4.0f - osc->phase -1.0f)*osc->amplitude;
