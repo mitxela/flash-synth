@@ -34,6 +34,8 @@ struct channel {
   int32_t bend;
   uint8_t RPNstack[4];
   uint8_t pbSensitivity;
+  float lfo_depth;
+  float lfo_freq;
   unsigned sustain:1;
 } channels[16];
 
@@ -44,6 +46,7 @@ struct oscillator {
   float amplitude;
   float fm_phase;
   float fm_amplitude;
+  float lfo_phase;
   uint32_t starttime;
   unsigned alive:1;
   unsigned released:1;
@@ -78,7 +81,7 @@ void noteOn(uint8_t n, uint8_t chan) {
   oscillators[i].notenumber=n;
   oscillators[i].channel=chan;
 
-  oscillators[i].fm_amplitude=fm_depth;
+  oscillators[i].fm_amplitude = fm_depth * fEqualLookup[ n ];
   //oscillators[i].phase = 1.0f;
 
 
@@ -134,7 +137,6 @@ void USART1_IRQHandler(void) {
         break;
 
         case 0xE0: //Pitch bend
-          //channels[chan].bend = channels[chan].pbSensitivity * ( 1.0f -(float)((i<<7) + bytetwo) / (1<<13) ) ;
           channels[chan].bend = channels[chan].pbSensitivity * (((i<<7) + bytetwo) - 0x2000);
         break;
 
@@ -143,14 +145,21 @@ void USART1_IRQHandler(void) {
 
           switch (bytetwo) {
 
+            case 1: //modulation
+              channels[chan].lfo_depth = (float)(i*8);
+            break;
+            case 76:
+              channels[chan].lfo_freq = 0.1+(float)(i)/512;
+            break;
+
             case 20:
               fm_freq=(float)(i)/32;
             break;
             case 21:
-              fm_depth=(float)(i)/127;
+              fm_depth=(float)(i*25)/127;
             break;
             case 22:
-              fm_decay=0.999 + ((float)(i)/127000);
+              fm_decay=0.9995 + ((float)(i)/254000);
             break;
 
             case 64: //sustain pedal
@@ -209,8 +218,18 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
 
   //int32_t b = channels[osc->channel].bend * channels[osc->channel].pbSensitivity ;
 
-  float f = fEqualLookup[ osc->notenumber + (channels[osc->channel].bend/0x2000) ] 
-          * bLookup14bit1semitone[ (channels[osc->channel].bend%0x2000) +0x2000 ];
+    osc->lfo_phase += channels[osc->channel].lfo_freq;
+    if (osc->lfo_phase>4.0f) osc->lfo_phase-=4.0f;
+
+
+
+  int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase *2048)] * channels[osc->channel].lfo_depth);
+
+
+
+  float f = fEqualLookup[ osc->notenumber + (bend/0x2000) ] 
+          * bLookup14bit1semitone[ (bend%0x2000) +0x2000 ];
+          
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
@@ -342,10 +361,15 @@ int main(void) {
   if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_1, (uint32_t *)buffer, BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
     Error_Handler();
   
+fm_freq=1.0;
+fm_depth=(float)(64*25)/127;
+fm_decay = 0.9995 + ((float)(121)/254000);;
+
 
   for (uint8_t i=16;i--;) {
   //  channels[i].bend=0x2000;
     channels[i].pbSensitivity = 2;
+    channels[i].lfo_freq = 0.1+(float)(48)/512;
   };
 
 
