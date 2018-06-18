@@ -105,11 +105,18 @@ void noteOff(uint8_t n, uint8_t chan) {
 }
 
 
+uint32_t random(void) {
+  static uint32_t seed = 123456;
+  return seed = seed * 16807 % 0x7FFFFFFF;
+}
+
 
 void USART1_IRQHandler(void) {
   static uint8_t status=0;
   static uint8_t bytenumber =0;
   static uint8_t bytetwo = 0;
+
+  static uint8_t fm_freq_cc[] = {0,0};
 
   uint8_t i = LL_USART_ReceiveData8(USART1);
 
@@ -153,12 +160,17 @@ void USART1_IRQHandler(void) {
             break;
 
             case 20:
-              fm_freq=(float)(i)/32;
+              fm_freq_cc[0] = i;
+              fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
             break;
             case 21:
-              fm_depth=(float)(i*25)/127;
+              fm_freq_cc[1] = i;
+              fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
             break;
             case 22:
+              fm_depth=(float)(i*25)/127;
+            break;
+            case 23:
               fm_decay=0.9995 + ((float)(i)/254000);
             break;
 
@@ -225,7 +237,7 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
 
   int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase *2048)] * channels[osc->channel].lfo_depth);
 
-
+  //bend += random()>>19;
 
   float f = fEqualLookup[ osc->notenumber + (bend/0x2000) ] 
           * bLookup14bit1semitone[ (bend%0x2000) +0x2000 ];
@@ -373,8 +385,11 @@ fm_decay = 0.9995 + ((float)(121)/254000);;
   };
 
 
-  /* Infinite loop */
-  while (1);
+  float d = 1.0f;
+  while (1) {
+    d = d * 0.9999999999;
+
+  };
 }
 
 void SystemClock_Config(void)
