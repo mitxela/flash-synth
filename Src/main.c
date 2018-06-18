@@ -6,6 +6,13 @@
 
 #define PI 3.14159265358979323846
 
+
+// one of 32, 48, 64, 80
+#define CPU_FREQ 32
+
+#define DAC_TIMER_PERIOD ((CPU_FREQ*1000000)/(44100))
+
+
 #include "lookupTables.h"
 
 DAC_HandleTypeDef    DacHandle;
@@ -387,7 +394,7 @@ fm_decay = 0.9995 + ((float)(121)/254000);;
 
   float d = 1.0f;
   while (1) {
-    d = d * 0.9999999999;
+//    d = d * 0.9999999999;
 
   };
 }
@@ -403,11 +410,25 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSICalibrationValue = 16;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+
   RCC_OscInitStruct.PLL.PLLM = 1;
+#if CPU_FREQ == 32
+  RCC_OscInitStruct.PLL.PLLN = 12;
+  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV6;
+#elif CPU_FREQ == 48
+  RCC_OscInitStruct.PLL.PLLN = 12;
+  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV4;
+#elif CPU_FREQ == 64
   RCC_OscInitStruct.PLL.PLLN = 8;
   RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
+#else
+  RCC_OscInitStruct.PLL.PLLN = 10;
+  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
+#endif
+  //not used
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
   RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
+
   if(HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
     Error_Handler();
   
@@ -460,7 +481,7 @@ void TIM6_Config(void)
   /* Time base configuration */
   htim.Instance = TIM6;
 
-  htim.Init.Period            = 1451; // (64MHz / 44.1kHz)
+  htim.Init.Period            = DAC_TIMER_PERIOD;
   htim.Init.Prescaler         = 0;
   htim.Init.ClockDivision     = 0;
   htim.Init.CounterMode       = TIM_COUNTERMODE_UP;
