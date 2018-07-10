@@ -8,7 +8,7 @@
 
 
 // one of 32, 48, 64, 80
-#define CPU_FREQ 32
+#define CPU_FREQ 64
 
 #define DAC_TIMER_PERIOD ((CPU_FREQ*1000000)/(44100))
 
@@ -133,8 +133,14 @@ void USART1_IRQHandler(void) {
 
   } else {
     if (bytenumber == 1) {
-      bytetwo = i;
-      bytenumber = 2;
+      if ((status & 0xF0) == 0xD0){
+
+        channels[status&0x0F].lfo_depth = (float)(i*8);
+
+      } else {
+        bytetwo = i;
+        bytenumber = 2;
+      }
     } else if (bytenumber == 2){
 
       uint8_t chan = status&0x0F;
