@@ -41,6 +41,7 @@ struct channel {
   int32_t bend;
   uint8_t RPNstack[4];
   uint8_t pbSensitivity;
+  uint8_t mod;
   float lfo_depth;
   float lfo_freq;
   unsigned sustain:1;
@@ -132,18 +133,19 @@ void USART1_IRQHandler(void) {
     bytenumber = 1;
 
   } else {
+    uint8_t chan = status&0x0F;
+    
     if (bytenumber == 1) {
       if ((status & 0xF0) == 0xD0){
 
-        channels[status&0x0F].lfo_depth = (float)(i*8);
+        if (i>channels[chan].mod)
+          channels[chan].lfo_depth = (float)(i*8);
 
       } else {
         bytetwo = i;
         bytenumber = 2;
       }
     } else if (bytenumber == 2){
-
-      uint8_t chan = status&0x0F;
 
       switch (status & 0xF0) {
 
@@ -166,6 +168,7 @@ void USART1_IRQHandler(void) {
           switch (bytetwo) {
 
             case 1: //modulation
+              channels[chan].mod = i;
               channels[chan].lfo_depth = (float)(i*8);
             break;
             case 76:
@@ -404,11 +407,7 @@ fm_decay = 0.9995 + ((float)(121)/254000);;
   };
 
 
-  float d = 1.0f;
-  while (1) {
-//    d = d * 0.9999999999;
-
-  };
+  while (1) {};
 }
 
 void SystemClock_Config(void)
