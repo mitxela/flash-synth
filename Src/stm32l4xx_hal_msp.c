@@ -98,19 +98,6 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef *hdac)
   hdma_dac1.Init.Mode = DMA_CIRCULAR;
   hdma_dac1.Init.Priority = DMA_PRIORITY_HIGH;
 
-  HAL_DMA_Init(&hdma_dac1);
-
-  /* Associate the initialized DMA handle to the DAC handle */
-  __HAL_LINKDMA(hdac, DMA_Handle1, hdma_dac1);
-
-  /*##-4- Configure the NVIC for DMA #########################################*/
-  /* Enable the DMA1_Channel3 IRQ Channel */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 2, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
-
-
-
-
   //////////////////////////////////////////////////////////////////
   hdma_dac1_ch2.Instance = DMA1_Channel4;
 
@@ -124,13 +111,22 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef *hdac)
   hdma_dac1_ch2.Init.Mode = DMA_CIRCULAR;
   hdma_dac1_ch2.Init.Priority = DMA_PRIORITY_HIGH;
 
+  HAL_DMA_Init(&hdma_dac1);
   HAL_DMA_Init(&hdma_dac1_ch2);
 
   /* Associate the initialized DMA handle to the DAC handle */
+  __HAL_LINKDMA(hdac, DMA_Handle1, hdma_dac1);
   __HAL_LINKDMA(hdac, DMA_Handle2, hdma_dac1_ch2);
 
   /*##-4- Configure the NVIC for DMA #########################################*/
   /* Enable the DMA1_Channel3 IRQ Channel */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 2, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+
+
+
+
+
   //HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 2, 0);
   //HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
   
