@@ -67,6 +67,7 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef *hdac)
 {
   GPIO_InitTypeDef          GPIO_InitStruct;
   static DMA_HandleTypeDef  hdma_dac1;
+  static DMA_HandleTypeDef  hdma_dac1_ch2;
 
   /*##-1- Enable peripherals and GPIO Clocks #################################*/
   /* Enable GPIO clock ****************************************/
@@ -78,7 +79,7 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef *hdac)
 
   /*##-2- Configure peripheral GPIO ##########################################*/
   /* DAC Channel1 GPIO pin configuration */
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -107,6 +108,32 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef *hdac)
   HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
 
+
+
+
+  //////////////////////////////////////////////////////////////////
+  hdma_dac1_ch2.Instance = DMA1_Channel4;
+
+  hdma_dac1_ch2.Init.Request  = DMA_REQUEST_5;
+
+  hdma_dac1_ch2.Init.Direction = DMA_MEMORY_TO_PERIPH;
+  hdma_dac1_ch2.Init.PeriphInc = DMA_PINC_DISABLE;
+  hdma_dac1_ch2.Init.MemInc = DMA_MINC_ENABLE;
+  hdma_dac1_ch2.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;//DMA_PDATAALIGN_BYTE;
+  hdma_dac1_ch2.Init.MemDataAlignment = DMA_MDATAALIGN_HALFWORD;//DMA_MDATAALIGN_BYTE;
+  hdma_dac1_ch2.Init.Mode = DMA_CIRCULAR;
+  hdma_dac1_ch2.Init.Priority = DMA_PRIORITY_HIGH;
+
+  HAL_DMA_Init(&hdma_dac1_ch2);
+
+  /* Associate the initialized DMA handle to the DAC handle */
+  __HAL_LINKDMA(hdac, DMA_Handle2, hdma_dac1_ch2);
+
+  /*##-4- Configure the NVIC for DMA #########################################*/
+  /* Enable the DMA1_Channel3 IRQ Channel */
+  //HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 2, 0);
+  //HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
+  
 }
 
 void HAL_UART_MspInit(UART_HandleTypeDef* huart)

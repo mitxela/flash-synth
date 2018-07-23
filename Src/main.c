@@ -386,6 +386,12 @@ int main(void) {
   if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_1, (uint32_t *)buffer, BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
     Error_Handler();
   
+  if (HAL_DAC_ConfigChannel(&DacHandle, &sConfig, DAC_CHANNEL_2) != HAL_OK)
+    Error_Handler();
+
+  if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_2, (uint32_t *)buffer, BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
+    Error_Handler();
+  
 fm_freq=1.0;
 fm_depth=(float)(64*25)/127;
 fm_decay = 0.9995 + ((float)(121)/254000);;
