@@ -63,6 +63,8 @@ struct oscillator {
 
 uint32_t timestamp = 0;
 
+float mainLut[8192]={0};
+
 void noteOn(uint8_t n, uint8_t chan) {
 
 // find a free oscillator
@@ -287,7 +289,7 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
 
     //sinLut is 8192 
     //phase is 0 to 4 -> *2048
-    buf[i] += sinLut[(int)(osc->phase *2048)] * osc->amplitude;
+    buf[i] += mainLut[(int)(osc->phase *2048)] * osc->amplitude;
 
   }
 
@@ -405,6 +407,11 @@ fm_decay = 0.9995 + ((float)(121)/254000);;
     channels[i].pbSensitivity = 2;
     channels[i].lfo_freq = 0.1+(float)(48)/512;
   };
+  
+  for (uint16_t i=0;i<8192;i++) {
+    mainLut[i]=sinLut[(i)%8192]*0.25 + sinLut[(i*2)%8192]*0.25 + sinLut[(i*3) %8192]*0.25 + sinLut[(i*4) %8192]*0.25;
+    
+  }
 
 
   while (1) {};
