@@ -50,6 +50,7 @@ struct channel {
 struct oscillator {
   uint8_t channel;
   uint8_t notenumber;
+  uint8_t velocity;
   float phase;
   float amplitude;
   float fm_phase;
@@ -65,7 +66,7 @@ uint32_t timestamp = 0;
 
 float mainLut[8192]={0};
 
-void noteOn(uint8_t n, uint8_t chan) {
+void noteOn(uint8_t n, uint8_t vel, uint8_t chan) {
 
 // find a free oscillator
 // set it up
@@ -90,6 +91,7 @@ void noteOn(uint8_t n, uint8_t chan) {
   oscillators[i].sustained = 0;
   oscillators[i].notenumber=n;
   oscillators[i].channel=chan;
+  oscillators[i].velocity=vel;
 
   oscillators[i].fm_amplitude = fm_depth * fEqualLookup[ n ];
   //oscillators[i].phase = 1.0f;
@@ -153,7 +155,7 @@ void USART1_IRQHandler(void) {
 
         case 0x90: //Note on
           if (i == 0) noteOff(bytetwo, chan); //running status uses velocity=0 for noteoff
-          else noteOn(bytetwo, chan);
+          else noteOn(bytetwo, i, chan);
         break;
 
         case 0x80: //Note off
@@ -267,7 +269,7 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
     if (osc->released) {
       osc->amplitude-=0.25;
       if (osc->amplitude <= 0.0) {osc->alive =0;osc->amplitude=0;}
-    } else if (osc->amplitude<WAVE_AMPLITUDE) osc->amplitude+=0.25;
+    } else if (osc->amplitude < osc->velocity) osc->amplitude+=0.25;
 
 
     osc->fm_phase += fm_freq*f;
@@ -409,7 +411,8 @@ fm_decay = 0.9995 + ((float)(121)/254000);;
   };
   
   for (uint16_t i=0;i<8192;i++) {
-    mainLut[i]=sinLut[(i)%8192]*0.25 + sinLut[(i*2)%8192]*0.25 + sinLut[(i*3) %8192]*0.25 + sinLut[(i*4) %8192]*0.25;
+    //mainLut[i]=sinLut[(i)%8192]*0.25 + sinLut[(i*2)%8192]*0.25 + sinLut[(i*3) %8192]*0.25 + sinLut[(i*4) %8192]*0.25;
+    mainLut[i]=sinLut[(i)%8192];
     
   }
 
