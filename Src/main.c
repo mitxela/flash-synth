@@ -93,7 +93,7 @@ void noteOn(uint8_t n, uint8_t vel, uint8_t chan) {
   oscillators[i].channel=chan;
   oscillators[i].velocity=vel;
 
-  oscillators[i].fm_amplitude = fm_depth * fEqualLookup[ n ];
+  oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
   //oscillators[i].phase = 1.0f;
 
 
