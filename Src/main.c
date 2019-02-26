@@ -66,6 +66,10 @@ uint32_t timestamp = 0;
 
 float mainLut[8192]={0};
 
+void oscAlgo1(struct oscillator* osc, uint16_t* buf);
+void oscAlgo2(struct oscillator* osc, uint16_t* buf);
+void (*doOscillator)(struct oscillator* osc, uint16_t* buf) = &oscAlgo2;
+
 void noteOn(uint8_t n, uint8_t vel, uint8_t chan) {
 
 // find a free oscillator
@@ -193,6 +197,9 @@ void USART1_IRQHandler(void) {
             case 23:
               fm_decay=0.9995 + ((float)(i)/254000);
             break;
+            case 24:
+              doOscillator = i>64? &oscAlgo2 : &oscAlgo1;
+            break;
 
             case 64: //sustain pedal
               channels[chan].sustain = (i>63);
@@ -231,7 +238,8 @@ void USART1_IRQHandler(void) {
 }
 
 
-void doOscillator(struct oscillator* osc, uint16_t* buf){
+
+void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
 /*
   with timer period 1451, sysclk 64MHz, real samplerate is 44107.51206
@@ -291,6 +299,46 @@ void doOscillator(struct oscillator* osc, uint16_t* buf){
 
     //sinLut is 8192 
     //phase is 0 to 4 -> *2048
+    buf[i] += mainLut[(int)(osc->phase *2048)] * osc->amplitude;
+
+  }
+
+
+}
+
+void oscAlgo2(struct oscillator* osc, uint16_t* buf){
+
+  osc->lfo_phase += channels[osc->channel].lfo_freq;
+  if (osc->lfo_phase>4.0f) osc->lfo_phase-=4.0f;
+
+
+  int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase *2048)] * channels[osc->channel].lfo_depth);
+
+  bend += random()>>19;
+
+  float f = fEqualLookup[ osc->notenumber + (bend/0x2000) ] 
+          * bLookup14bit1semitone[ (bend%0x2000) +0x2000 ];
+          
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+
+    //Simple envelope
+    if (osc->released) {
+      osc->amplitude-=0.25;
+      if (osc->amplitude <= 0.0) {osc->alive =0;osc->amplitude=0;}
+    } else if (osc->amplitude < osc->velocity) osc->amplitude+=0.25;
+
+
+    osc->fm_phase += fm_freq*f;
+    if (osc->fm_phase>4.0f) osc->fm_phase-=4.0f;
+
+
+    osc->fm_amplitude *= fm_decay;
+
+    osc->phase += f  + sinLut[(int)(osc->fm_phase *2048)]*osc->fm_amplitude;
+    while (osc->phase>4.0f) osc->phase-=4.0f;
+    while (osc->phase<0.0f) osc->phase+=4.0f;
+
     buf[i] += mainLut[(int)(osc->phase *2048)] * osc->amplitude;
 
   }
