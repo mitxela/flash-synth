@@ -181,6 +181,9 @@ flash: all
 flash-mingw: all
 	"C:\Program Files (x86)\STMicroelectronics\STM32 ST-LINK Utility\ST-LINK Utility\ST-LINK_CLI.exe" -c SWD UR LPM -p $(BUILD_DIR)/$(TARGET).bin 0x8000000 -Rst
 
+flash-stl: all
+	st-flash write $(BUILD_DIR)/$(TARGET).bin 0x8000000
+
 #######################################
 # clean up
 #######################################
