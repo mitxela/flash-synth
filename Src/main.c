@@ -314,7 +314,7 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
   int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase *2048)] * channels[osc->channel].lfo_depth);
 
-  bend += random()>>19;
+  bend += (random()>>19)-2048;
 
   float f = fEqualLookup[ osc->notenumber + (bend/0x2000) ] 
           * bLookup14bit1semitone[ (bend%0x2000) +0x2000 ];
