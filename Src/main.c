@@ -30,6 +30,8 @@ static void Error_Handler(void);
 // To be absolutely sure it isn't going to clip, wave amplitude should be less than 2048/polyphony = 128...
 #define WAVE_AMPLITUDE 128
 
+#define DEFAULT_PB_RANGE 2
+
 uint16_t buffer[BUFFERSIZE*2] = {0};
 
   float fm_freq = 0.1;
@@ -44,6 +46,7 @@ struct channel {
   uint8_t mod;
   float lfo_depth;
   float lfo_freq;
+  const float* tuning;
   unsigned sustain:1;
 } channels[16];
 
@@ -68,7 +71,7 @@ float mainLut[8192]={0};
 
 void oscAlgo1(struct oscillator* osc, uint16_t* buf);
 void oscAlgo2(struct oscillator* osc, uint16_t* buf);
-void (*doOscillator)(struct oscillator* osc, uint16_t* buf) = &oscAlgo2;
+void (*doOscillator)(struct oscillator* osc, uint16_t* buf) = &oscAlgo1;
 
 void noteOn(uint8_t n, uint8_t vel, uint8_t chan) {
 
@@ -219,8 +222,25 @@ void USART1_IRQHandler(void) {
             case 38:  channels[chan].RPNstack[3]=i; break; //not used yet
             case 6:   channels[chan].RPNstack[2]=i; 
               if (channels[chan].RPNstack[0]==0 && channels[chan].RPNstack[1]==0) {//Pitch bend sensitivity
-                // should this be limited to 24 ?
-                channels[chan].pbSensitivity = i;
+
+                // For now, only allow changing bend range in 12ET mode
+                if (channels[chan].tuning==&fEqualLookup[0]) {
+                  channels[chan].pbSensitivity = i; // should this be limited to 24 ?
+                }
+              }
+            break;
+
+            case 114: // Change tuning
+              if (i == 0) { // set 12ET
+                for (int j=0;j<16;j++) {
+                  channels[j].pbSensitivity=DEFAULT_PB_RANGE;
+                  channels[j].tuning = &fEqualLookup[0];
+                }
+              } else { // Set channel-specific tuning tables
+                for (int j=0;j<16;j++) {
+                  channels[j].pbSensitivity=1;
+                  channels[j].tuning = &fTuningTables[j][0];
+                }
               }
             break;
 
@@ -267,7 +287,7 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
   //bend += random()>>19;
 
-  float f = fEqualLookup[ osc->notenumber + (bend/0x2000) ] 
+  float f = channels[osc->channel].tuning[ osc->notenumber + (bend/0x2000) ] 
           * bLookup14bit1semitone[ (bend%0x2000) +0x2000 ];
           
 
@@ -454,7 +474,8 @@ fm_decay = 0.9995 + ((float)(121)/254000);;
 
   for (uint8_t i=16;i--;) {
   //  channels[i].bend=0x2000;
-    channels[i].pbSensitivity = 2;
+    channels[i].pbSensitivity = DEFAULT_PB_RANGE;
+    channels[i].tuning = &fEqualLookup[0];
     channels[i].lfo_freq = 0.1+(float)(48)/512;
   };
   
