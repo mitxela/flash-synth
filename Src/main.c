@@ -261,35 +261,24 @@ void USART1_IRQHandler(void) {
 
 void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
-/*
-  with timer period 1451, sysclk 64MHz, real samplerate is 44107.51206
+  osc->lfo_phase += channels[osc->channel].lfo_freq;
+  if (osc->lfo_phase>8192.0f) osc->lfo_phase-=8192.0f;
 
-  f_a = (4*440) / fs = 4*440/(64M/1451) = 4*440*1451/64e6 = 0.0399025
+  float f;
 
-*/
+  if (channels[osc->channel].pbSensitivity == 1) {
 
-/*
-  float f = 0.0399025 * pow(2.0, (
-      (float)osc->notenumber
-      - 69
-      - channels[osc->channel].bend
-    )/12 );
-*/
+    // We should probably enforce that LFO depth is never more than a semitone
+    f = channels[osc->channel].tuning[ osc->notenumber]
+      * bLookup14bit1semitone[ channels[osc->channel].bend +0x2000 ]
+      * bLookup14bit1semitone[ (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth) +0x2000 ];
 
-  //int32_t b = channels[osc->channel].bend * channels[osc->channel].pbSensitivity ;
+  } else {
+    int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth);
 
-    osc->lfo_phase += channels[osc->channel].lfo_freq;
-    if (osc->lfo_phase>8192.0f) osc->lfo_phase-=8192.0f;
-
-
-
-  int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth);
-
-  //bend += random()>>19;
-
-  float f = channels[osc->channel].tuning[ osc->notenumber + (bend/0x2000) ] 
-          * bLookup14bit1semitone[ (bend%0x2000) +0x2000 ];
-          
+    f = channels[osc->channel].tuning[ osc->notenumber + (bend>>13) ]
+      * bLookup14bit1semitone[ (bend&0x1FFF) +0x2000 ];
+  }
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
