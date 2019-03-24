@@ -183,7 +183,7 @@ void USART1_IRQHandler(void) {
               channels[chan].lfo_depth = (float)(i*8);
             break;
             case 76:
-              channels[chan].lfo_freq = 0.1+(float)(i)/512;
+              channels[chan].lfo_freq = 204.8 + (float)(i*4);
             break;
 
             case 20:
@@ -279,11 +279,11 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
   //int32_t b = channels[osc->channel].bend * channels[osc->channel].pbSensitivity ;
 
     osc->lfo_phase += channels[osc->channel].lfo_freq;
-    if (osc->lfo_phase>4.0f) osc->lfo_phase-=4.0f;
+    if (osc->lfo_phase>8192.0f) osc->lfo_phase-=8192.0f;
 
 
 
-  int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase *2048)] * channels[osc->channel].lfo_depth);
+  int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth);
 
   //bend += random()>>19;
 
@@ -301,14 +301,14 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
 
     osc->fm_phase += fm_freq*f;
-    if (osc->fm_phase>4.0f) osc->fm_phase-=4.0f;
+    if (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
 
 
     osc->fm_amplitude *= fm_decay;
 
-    osc->phase += f  + sinLut[(int)(osc->fm_phase *2048)]*osc->fm_amplitude;
-    while (osc->phase>4.0f) osc->phase-=4.0f;
-    while (osc->phase<0.0f) osc->phase+=4.0f;
+    osc->phase += f  + sinLut[(int)(osc->fm_phase)]*osc->fm_amplitude;
+    while (osc->phase>8192.0f) osc->phase-=8192.0f;
+    while (osc->phase<0.0f) osc->phase+=8192.0f;
 
 
     // if (osc->phase>2.0f) {
@@ -319,7 +319,7 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
     //sinLut is 8192 
     //phase is 0 to 4 -> *2048
-    buf[i] += mainLut[(int)(osc->phase *2048)] * osc->amplitude;
+    buf[i] += mainLut[(int)(osc->phase)] * osc->amplitude;
 
   }
 
@@ -469,14 +469,13 @@ int main(void) {
   
 fm_freq=1.0;
 fm_depth=(float)(64*25)/127;
-fm_decay = 0.9995 + ((float)(121)/254000);;
+fm_decay = 0.9995 + ((float)(121)/254000);
 
 
   for (uint8_t i=16;i--;) {
-  //  channels[i].bend=0x2000;
     channels[i].pbSensitivity = DEFAULT_PB_RANGE;
     channels[i].tuning = &fEqualLookup[0];
-    channels[i].lfo_freq = 0.1+(float)(48)/512;
+    channels[i].lfo_freq = (0.1+(float)(48 )/512)* 2048;
   };
   
   for (uint16_t i=0;i<8192;i++) {
