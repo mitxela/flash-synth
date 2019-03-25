@@ -230,13 +230,23 @@ void USART1_IRQHandler(void) {
               }
             break;
 
-            case 114: // Change tuning
-              if (i == 0) { // set 12ET
+            case 3: // Per-channel tuning
+              if (i == 0) {
+                  channels[chan].pbSensitivity=DEFAULT_PB_RANGE;
+                  channels[chan].tuning = &fEqualLookup[0];
+              } else if (i<=16) {
+                  channels[chan].pbSensitivity=1;
+                  channels[chan].tuning = &fTuningTables[i-1][0];
+              }
+            break;
+
+            case 9: // All channels tuning
+              if (i == 0) {
                 for (int j=0;j<16;j++) {
                   channels[j].pbSensitivity=DEFAULT_PB_RANGE;
                   channels[j].tuning = &fEqualLookup[0];
                 }
-              } else { // Set channel-specific tuning tables
+              } else {
                 for (int j=0;j<16;j++) {
                   channels[j].pbSensitivity=1;
                   channels[j].tuning = &fTuningTables[j][0];
@@ -299,15 +309,6 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
     while (osc->phase>8192.0f) osc->phase-=8192.0f;
     while (osc->phase<0.0f) osc->phase+=8192.0f;
 
-
-    // if (osc->phase>2.0f) {
-      // buf[i] += (4.0f - osc->phase -1.0f)*osc->amplitude;
-    // } else {
-      // buf[i] += (osc->phase -1.0f)*osc->amplitude;
-    // }
-
-    //sinLut is 8192 
-    //phase is 0 to 4 -> *2048
     buf[i] += mainLut[(int)(osc->phase)] * osc->amplitude;
 
   }
