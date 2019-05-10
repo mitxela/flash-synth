@@ -73,6 +73,94 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf);
 void oscAlgo2(struct oscillator* osc, uint16_t* buf);
 void (*doOscillator)(struct oscillator* osc, uint16_t* buf) = &oscAlgo1;
 
+void antialias(){
+// Must be symmetric
+
+#define AVGP 128
+
+  float b[AVGP]={};
+  float sum = 0;
+  uint8_t idx = 0;
+  
+  for (uint8_t i=0; i<AVGP; i++) {
+    b[i] = mainLut[8192 - AVGP + i];
+  }
+
+  for (uint16_t i=0;i<8192;i++) {
+    sum=0;
+    for (uint8_t j=0; j<AVGP; j++) {
+      sum+=b[j];
+    }
+    b[idx++] = mainLut[i];
+    mainLut[i] = sum*0.0078125;//*(1/AVGP);
+    
+    if (idx==AVGP) idx=0;
+  }
+
+}
+
+void setWaveform(uint8_t id) {
+
+// TODO: normalize waveforms
+
+  // %8192 == &8191
+
+  switch (id) {
+
+  case 1: // Hammondish
+    for (uint16_t i=0;i<8192;i++) {
+      mainLut[i]=sinLut[(i)&8191]*0.25 + sinLut[(i*2)&8191]*0.25 + sinLut[(i*3) &8191]*0.25 + sinLut[(i*4) &8191]*0.25;
+    }
+    break;
+
+  case 2: // sine cubed
+    for (uint16_t i=0;i<8192;i++) {
+      mainLut[i]=sinLut[i]*sinLut[i]*sinLut[i];
+    }
+    break;
+
+  case 3: // half sine
+    for (uint16_t i=0;i<4096;i++) {
+      mainLut[i]=sinLut[i];
+    }
+    for (uint16_t i=4096;i<8192;i++) {
+      mainLut[i]=0;
+    }
+    break;
+  case 4: // abs sine
+    for (uint16_t i=0;i<8192;i++) {
+      mainLut[i]= sinLut[i] > 0 ? sinLut[i] : -sinLut[i];
+    }
+//antialias();
+    break;
+  case 5: // 
+    for (uint16_t i=0;i<4096;i++) {
+      mainLut[i]=0.5;
+    }
+    for (uint16_t i=4096;i<8192;i++) {
+      mainLut[i]=-0.5;
+    }
+//antialias();
+    break;
+  case 6: // 
+    for (uint16_t i=0;i<4096;i++) {
+      mainLut[i]=0.5;
+    }
+    for (uint16_t i=4096;i<8192;i++) {
+      mainLut[i]=-0.5;
+    }
+antialias();
+antialias();
+    break;
+
+  default: //sine
+    for (uint16_t i=0;i<8192;i++) {
+      mainLut[i]=sinLut[i];
+    }
+  }
+}
+
+
 void noteOn(uint8_t n, uint8_t vel, uint8_t chan) {
 
 // find a free oscillator
@@ -202,6 +290,10 @@ void USART1_IRQHandler(void) {
             break;
             case 24:
               doOscillator = i>64? &oscAlgo2 : &oscAlgo1;
+            break;
+
+            case 25:
+              setWaveform(i);
             break;
 
             case 64: //sustain pedal
@@ -468,12 +560,7 @@ fm_decay = 0.9995 + ((float)(121)/254000);
     channels[i].lfo_freq = (0.1+(float)(48 )/512)* 2048;
   };
   
-  for (uint16_t i=0;i<8192;i++) {
-    //mainLut[i]=sinLut[(i)%8192]*0.25 + sinLut[(i*2)%8192]*0.25 + sinLut[(i*3) %8192]*0.25 + sinLut[(i*4) %8192]*0.25;
-    mainLut[i]=sinLut[(i)%8192];
-    
-  }
-
+  setWaveform(0);
 
   while (1) {};
 }
