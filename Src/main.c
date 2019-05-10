@@ -35,9 +35,10 @@ static void Error_Handler(void);
 
 uint16_t buffer[BUFFERSIZE*2] = {0};
 
-  float fm_freq = 0.1;
-  float fm_depth = 0.5;
-  float fm_decay = 0.9999;
+  float fm_freq;
+  float fm_depth;
+  float fm_decay;
+  float lfo_freq;
 
 struct channel {
   uint8_t volume;
@@ -46,7 +47,6 @@ struct channel {
   uint8_t pbSensitivity;
   uint8_t mod;
   float lfo_depth;
-  float lfo_freq;
   const float* tuning;
   unsigned sustain:1;
 } channels[16];
@@ -173,7 +173,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       channels[chan].lfo_depth = (float)(i*8);
     break;
     case 76:
-      channels[chan].lfo_freq = 204.8 + (float)(i*4);
+      lfo_freq = 204.8 + (float)(i*4);
     break;
 
     case 20:
@@ -250,7 +250,14 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
   }
 }
 
-//void loadPatch(uint8_t 
+void loadPatch(uint8_t p){
+  // Link between byte position in the patch file and CC number
+  const uint8_t paramMap[64] = {
+    20,21,22,23,24,25,76 
+  };
+  for (uint8_t i=0;i<64;i++)
+    parameterChange(0, paramMap[i], bPatches[p][i]);
+}
 
 void noteOn(uint8_t n, uint8_t vel, uint8_t chan) {
 
@@ -322,20 +329,27 @@ void USART1_IRQHandler(void) {
 
   } else {
     uint8_t chan = status&0x0F;
-    
-    if (bytenumber == 1) {
-      if ((status & 0xF0) == 0xD0){
+    status &= 0xF0;
 
-        if (i>channels[chan].mod)
-          channels[chan].lfo_depth = (float)(i*8);
+    if (bytenumber == 1) { // Check two-byte messages
+      switch (status) {
 
-      } else {
-        bytetwo = i;
-        bytenumber = 2;
+        case 0xD0: //After-touch
+          if (i>=channels[chan].mod)
+            channels[chan].lfo_depth = (float)(i*8);
+          break;
+
+        case 0xC0: //Program Change
+          loadPatch(i);
+          break;
+
+        default:
+          bytetwo = i;
+          bytenumber = 2;
       }
     } else if (bytenumber == 2){
 
-      switch (status & 0xF0) {
+      switch (status) {
 
         case 0x90: //Note on
           if (i == 0) noteOff(bytetwo, chan); //running status uses velocity=0 for noteoff
@@ -350,11 +364,9 @@ void USART1_IRQHandler(void) {
           channels[chan].bend = channels[chan].pbSensitivity * (((i<<7) + bytetwo) - 0x2000);
         break;
 
-
         case 0xB0: // Continuous controller
           parameterChange(chan, bytetwo, i);
         break;
-
       }
 
 
@@ -369,7 +381,7 @@ void USART1_IRQHandler(void) {
 
 void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
-  osc->lfo_phase += channels[osc->channel].lfo_freq;
+  osc->lfo_phase += lfo_freq;
   if (osc->lfo_phase>8192.0f) osc->lfo_phase-=8192.0f;
 
   float f;
@@ -416,7 +428,7 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
 void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
-  osc->lfo_phase += channels[osc->channel].lfo_freq;
+  osc->lfo_phase += lfo_freq;
   if (osc->lfo_phase>4.0f) osc->lfo_phase-=4.0f;
 
 
@@ -543,18 +555,20 @@ int main(void) {
   if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_2, (uint32_t *)buffer, BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
     Error_Handler();
   
+/*
 fm_freq=1.0;
 fm_depth=(float)(64*25)/127;
 fm_decay = 0.9995 + ((float)(121)/254000);
+lfo_freq = (0.1+(float)(48 )/512)* 2048;
 
-
+setWaveform(0);
+*/
   for (uint8_t i=16;i--;) {
     channels[i].pbSensitivity = DEFAULT_PB_RANGE;
     channels[i].tuning = &fEqualLookup[0];
-    channels[i].lfo_freq = (0.1+(float)(48 )/512)* 2048;
   };
   
-  setWaveform(0);
+  loadPatch(0);
 
   while (1) {
 
