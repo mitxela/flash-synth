@@ -42,7 +42,8 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 MEMORY
 {
 RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 64K
-FLASH (rx)     : ORIGIN = 0x8000000, LENGTH = 248K
+FLASH (rx)     : ORIGIN = 0x8000000, LENGTH = 240K
+PATCHES (rx)   : ORIGIN = 0x803c000, LENGTH = 8K
 TABLES (rx)    : ORIGIN = 0x803e000, LENGTH = 8K
 }
 
@@ -167,6 +168,12 @@ SECTIONS
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >RAM
+
+
+  .patches :
+  {
+    *(.Patches*);
+  } >PATCHES
 
   .tuning_tables :
   {

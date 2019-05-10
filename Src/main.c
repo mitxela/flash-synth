@@ -14,6 +14,7 @@
 
 
 #include "lookupTables.h"
+#include "defaultPatches.h"
 
 DAC_HandleTypeDef    DacHandle;
 UART_HandleTypeDef   huart1;
@@ -66,12 +67,14 @@ struct oscillator {
 } oscillators[POLYPHONY];
 
 uint32_t timestamp = 0;
+uint8_t targetWave = 0;
 
 float mainLut[8192]={0};
 
 void oscAlgo1(struct oscillator* osc, uint16_t* buf);
 void oscAlgo2(struct oscillator* osc, uint16_t* buf);
 void (*doOscillator)(struct oscillator* osc, uint16_t* buf) = &oscAlgo1;
+
 
 void antialias(){
 // Must be symmetric
@@ -100,7 +103,7 @@ void antialias(){
 }
 
 void setWaveform(uint8_t id) {
-
+  if (id==255) return;
 // TODO: normalize waveforms
 
   // %8192 == &8191
@@ -158,8 +161,96 @@ antialias();
       mainLut[i]=sinLut[i];
     }
   }
+  if (id==targetWave) targetWave=255;
 }
 
+void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
+  static uint8_t fm_freq_cc[] = {0,0};
+
+  switch (cc) {
+    case 1: //modulation
+      channels[chan].mod = i;
+      channels[chan].lfo_depth = (float)(i*8);
+    break;
+    case 76:
+      channels[chan].lfo_freq = 204.8 + (float)(i*4);
+    break;
+
+    case 20:
+      fm_freq_cc[0] = i;
+      fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
+    break;
+    case 21:
+      fm_freq_cc[1] = i;
+      fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
+    break;
+    case 22:
+      fm_depth=(float)(i*25)/127;
+    break;
+    case 23:
+      fm_decay=0.9995 + ((float)(i)/254000);
+    break;
+    case 24:
+      doOscillator = i>64? &oscAlgo2 : &oscAlgo1;
+    break;
+
+    case 25:
+      targetWave = i;
+    break;
+
+    case 64: //sustain pedal
+      channels[chan].sustain = (i>63);
+      if (channels[chan].sustain == 0) {//pedal released
+        //loop through oscillators and release any with sustained=true
+        for (uint8_t i=POLYPHONY; i--;) {
+          if (oscillators[i].sustained && oscillators[i].alive && !oscillators[i].released && oscillators[i].channel==chan) {
+            oscillators[i].released=1;
+            oscillators[i].sustained=0;
+          }
+        }
+      }
+    break;
+
+    case 101: channels[chan].RPNstack[0]=i; break;
+    case 100: channels[chan].RPNstack[1]=i; break;
+    case 38:  channels[chan].RPNstack[3]=i; break; //not used yet
+    case 6:   channels[chan].RPNstack[2]=i; 
+      if (channels[chan].RPNstack[0]==0 && channels[chan].RPNstack[1]==0) {//Pitch bend sensitivity
+
+        // For now, only allow changing bend range in 12ET mode
+        if (channels[chan].tuning==&fEqualLookup[0]) {
+          channels[chan].pbSensitivity = i; // should this be limited to 24 ?
+        }
+      }
+    break;
+
+    case 3: // Per-channel tuning
+      if (i == 0) {
+          channels[chan].pbSensitivity=DEFAULT_PB_RANGE;
+          channels[chan].tuning = &fEqualLookup[0];
+      } else if (i<=16) {
+          channels[chan].pbSensitivity=1;
+          channels[chan].tuning = &fTuningTables[i-1][0];
+      }
+    break;
+
+    case 9: // All channels tuning
+      if (i == 0) {
+        for (int j=0;j<16;j++) {
+          channels[j].pbSensitivity=DEFAULT_PB_RANGE;
+          channels[j].tuning = &fEqualLookup[0];
+        }
+      } else {
+        for (int j=0;j<16;j++) {
+          channels[j].pbSensitivity=1;
+          channels[j].tuning = &fTuningTables[j][0];
+        }
+      }
+    break;
+  }
+}
+
+//void loadPatch(uint8_t 
 
 void noteOn(uint8_t n, uint8_t vel, uint8_t chan) {
 
@@ -223,8 +314,6 @@ void USART1_IRQHandler(void) {
   static uint8_t bytenumber =0;
   static uint8_t bytetwo = 0;
 
-  static uint8_t fm_freq_cc[] = {0,0};
-
   uint8_t i = LL_USART_ReceiveData8(USART1);
 
   if (i & 0x80) {
@@ -263,90 +352,7 @@ void USART1_IRQHandler(void) {
 
 
         case 0xB0: // Continuous controller
-
-          switch (bytetwo) {
-
-            case 1: //modulation
-              channels[chan].mod = i;
-              channels[chan].lfo_depth = (float)(i*8);
-            break;
-            case 76:
-              channels[chan].lfo_freq = 204.8 + (float)(i*4);
-            break;
-
-            case 20:
-              fm_freq_cc[0] = i;
-              fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
-            break;
-            case 21:
-              fm_freq_cc[1] = i;
-              fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
-            break;
-            case 22:
-              fm_depth=(float)(i*25)/127;
-            break;
-            case 23:
-              fm_decay=0.9995 + ((float)(i)/254000);
-            break;
-            case 24:
-              doOscillator = i>64? &oscAlgo2 : &oscAlgo1;
-            break;
-
-            case 25:
-              setWaveform(i);
-            break;
-
-            case 64: //sustain pedal
-              channels[chan].sustain = (i>63);
-              if (channels[chan].sustain == 0) {//pedal released
-                //loop through oscillators and release any with sustained=true
-                for (uint8_t i=POLYPHONY; i--;) {
-                  if (oscillators[i].sustained && oscillators[i].alive && !oscillators[i].released && oscillators[i].channel==chan) {
-                    oscillators[i].released=1;
-                    oscillators[i].sustained=0;
-                  }
-                }
-              }
-            break;
-
-            case 101: channels[chan].RPNstack[0]=i; break;
-            case 100: channels[chan].RPNstack[1]=i; break;
-            case 38:  channels[chan].RPNstack[3]=i; break; //not used yet
-            case 6:   channels[chan].RPNstack[2]=i; 
-              if (channels[chan].RPNstack[0]==0 && channels[chan].RPNstack[1]==0) {//Pitch bend sensitivity
-
-                // For now, only allow changing bend range in 12ET mode
-                if (channels[chan].tuning==&fEqualLookup[0]) {
-                  channels[chan].pbSensitivity = i; // should this be limited to 24 ?
-                }
-              }
-            break;
-
-            case 3: // Per-channel tuning
-              if (i == 0) {
-                  channels[chan].pbSensitivity=DEFAULT_PB_RANGE;
-                  channels[chan].tuning = &fEqualLookup[0];
-              } else if (i<=16) {
-                  channels[chan].pbSensitivity=1;
-                  channels[chan].tuning = &fTuningTables[i-1][0];
-              }
-            break;
-
-            case 9: // All channels tuning
-              if (i == 0) {
-                for (int j=0;j<16;j++) {
-                  channels[j].pbSensitivity=DEFAULT_PB_RANGE;
-                  channels[j].tuning = &fEqualLookup[0];
-                }
-              } else {
-                for (int j=0;j<16;j++) {
-                  channels[j].pbSensitivity=1;
-                  channels[j].tuning = &fTuningTables[j][0];
-                }
-              }
-            break;
-
-          }
+          parameterChange(chan, bytetwo, i);
         break;
 
       }
@@ -511,18 +517,6 @@ int main(void) {
 
    __HAL_RCC_GPIOA_CLK_ENABLE();
 
-
-  // __HAL_RCC_GPIOC_CLK_ENABLE();
-  // GPIO_InitTypeDef GPIO_InitStruct;
-  // GPIO_InitStruct.Pin = GPIO_PIN_0;
-  // GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  // GPIO_InitStruct.Pull = GPIO_NOPULL;
-  // GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  // HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  // HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_0);
-
-  
   USART1_Init();
 
   DacHandle.Instance = DAC1;
@@ -562,7 +556,11 @@ fm_decay = 0.9995 + ((float)(121)/254000);
   
   setWaveform(0);
 
-  while (1) {};
+  while (1) {
+
+    setWaveform(targetWave);
+
+  };
 }
 
 void SystemClock_Config(void)
