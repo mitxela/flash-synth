@@ -145,12 +145,15 @@ all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET
 #######################################
 # build the application
 #######################################
+
 # list of objects
 OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(C_SOURCES:.c=.o)))
 vpath %.c $(sort $(dir $(C_SOURCES)))
 # list of ASM program objects
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(ASM_SOURCES:.s=.o)))
 vpath %.s $(sort $(dir $(ASM_SOURCES)))
+
+$(BUILD_DIR)/main.o: Src/lookupTables.h Src/defaultPatches.h
 
 $(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR) 
 	$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
@@ -171,7 +174,6 @@ $(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 $(BUILD_DIR):
 	mkdir $@		
 
-
 # flash
 flash: all
 	"/mnt/c/Program Files (x86)/STMicroelectronics/STM32 ST-LINK Utility/ST-LINK Utility/ST-LINK_CLI.exe" -c SWD UR -p $(BUILD_DIR)/$(TARGET).bin 0x8000000 -Rst
@@ -188,6 +190,7 @@ clean:
 #######################################
 # dependencies
 #######################################
--include $(shell mkdir .dep 2>/dev/null) $(wildcard .dep/*)
+#-include $(shell mkdir .dep 2>/dev/null) $(wildcard .dep/*)
+
 
 # *** EOF ***
