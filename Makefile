@@ -124,7 +124,7 @@ endif
 CFLAGS += -save-temps=obj -fverbose-asm
 
 # Generate dependency information
-CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
+CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)"
 
 
 #######################################
@@ -153,7 +153,6 @@ vpath %.c $(sort $(dir $(C_SOURCES)))
 OBJECTS += $(addprefix $(BUILD_DIR)/,$(notdir $(ASM_SOURCES:.s=.o)))
 vpath %.s $(sort $(dir $(ASM_SOURCES)))
 
-$(BUILD_DIR)/main.o: Src/lookupTables.h Src/defaultPatches.h
 
 $(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR) 
 	$(CC) -c $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
@@ -181,16 +180,18 @@ flash: all
 flash-mingw: all
 	"C:\Program Files (x86)\STMicroelectronics\STM32 ST-LINK Utility\ST-LINK Utility\ST-LINK_CLI.exe" -c SWD UR LPM -p $(BUILD_DIR)/$(TARGET).bin 0x8000000 -Rst
 
+flash-stl: all
+	st-flash write $(BUILD_DIR)/$(TARGET).bin 0x8000000
+
 #######################################
 # clean up
 #######################################
 clean:
-	-rm -fR .dep $(BUILD_DIR)
+	-rm -fR $(BUILD_DIR)
   
 #######################################
 # dependencies
 #######################################
-#-include $(shell mkdir .dep 2>/dev/null) $(wildcard .dep/*)
-
+-include $(BUILD_DIR)/*.d
 
 # *** EOF ***
