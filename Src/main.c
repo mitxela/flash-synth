@@ -39,6 +39,7 @@ uint16_t buffer[BUFFERSIZE*2] = {0};
   float fm_depth;
   float fm_decay;
   float lfo_freq;
+uint8_t aa = 64;
 
 struct channel {
   uint8_t volume;
@@ -73,31 +74,30 @@ float mainLut[8192]={0};
 
 void oscAlgo1(struct oscillator* osc, uint16_t* buf);
 void oscAlgo2(struct oscillator* osc, uint16_t* buf);
-void (*doOscillator)(struct oscillator* osc, uint16_t* buf) = &oscAlgo1;
+void (*doOscillator)(struct oscillator* osc, uint16_t* buf) = &oscAlgo2;
 
 
-void antialias(){
+void antialias(unsigned int radius){
 // Must be symmetric
 
-#define AVGP 128
-
-  float b[AVGP]={};
+  float b[1024]={};
   float sum = 0;
-  uint8_t idx = 0;
+  float scale = 1.0/((float)radius);
+  unsigned int idx = 0;
   
-  for (uint8_t i=0; i<AVGP; i++) {
-    b[i] = mainLut[8192 - AVGP + i];
+  for (int i=0; i<radius; i++) {
+    b[i] = mainLut[8192 - radius + i];
   }
 
-  for (uint16_t i=0;i<8192;i++) {
+  for (int i=0;i<8192;i++) {
     sum=0;
-    for (uint8_t j=0; j<AVGP; j++) {
+    for (int j=0; j<radius; j++) {
       sum+=b[j];
     }
     b[idx++] = mainLut[i];
-    mainLut[i] = sum*0.0078125;//*(1/AVGP);
+    mainLut[i] = sum*scale;
     
-    if (idx==AVGP) idx=0;
+    if (idx==radius) idx=0;
   }
 
 }
@@ -134,16 +134,16 @@ void setWaveform(uint8_t id) {
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]= sinLut[i] > 0 ? sinLut[i] : -sinLut[i];
     }
+//antialias(128);
 //antialias();
     break;
-  case 5: // 
+  case 5: // hard square
     for (uint16_t i=0;i<4096;i++) {
       mainLut[i]=0.5;
     }
     for (uint16_t i=4096;i<8192;i++) {
       mainLut[i]=-0.5;
     }
-//antialias();
     break;
   case 6: // 
     for (uint16_t i=0;i<4096;i++) {
@@ -152,15 +152,28 @@ void setWaveform(uint8_t id) {
     for (uint16_t i=4096;i<8192;i++) {
       mainLut[i]=-0.5;
     }
-antialias();
-antialias();
     break;
+
+  case 7: // saw
+    {
+      float j=0.5;
+      for (uint16_t i=0;i<8192;i++) {
+        mainLut[i]= j+=1.0/8192.0;
+      }
+    }
+    break;
+
+
+
 
   default: //sine
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]=sinLut[i];
     }
   }
+  antialias((aa<<3)+8);
+  antialias((aa<<3)+8);
+
   if (id==targetWave) targetWave=255;
 }
 
@@ -185,7 +198,14 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
     break;
     case 22:
-      fm_depth=(float)(i*25)/127;
+      {
+        float factor = fm_depth;
+        fm_depth=(float)(i*25)/127;
+        factor = fm_depth/factor; 
+        for (uint8_t j=POLYPHONY; j--;) {
+          oscillators[j].fm_amplitude *= factor;
+        }
+      }
     break;
     case 23:
       fm_decay=0.9995 + ((float)(i)/254000);
@@ -197,6 +217,13 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     case 25:
       targetWave = i;
     break;
+    case 26:
+      aa = i;
+      //targetWave = i;
+    break;
+
+
+
 
     case 64: //sustain pedal
       channels[chan].sustain = (i>63);
@@ -429,16 +456,25 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
   osc->lfo_phase += lfo_freq;
-  if (osc->lfo_phase>4.0f) osc->lfo_phase-=4.0f;
+  if (osc->lfo_phase>8192.0f) osc->lfo_phase-=8192.0f;
 
+  float f;
 
-  int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase *2048)] * channels[osc->channel].lfo_depth);
+  if (channels[osc->channel].pbSensitivity == 1) {
 
-  bend += (random()>>19)-2048;
+    // We should probably enforce that LFO depth is never more than a semitone
+    f = channels[osc->channel].tuning[ osc->notenumber]
+      * bLookup14bit1semitone[ channels[osc->channel].bend +0x2000 ]
+      * bLookup14bit1semitone[ (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth) +0x2000 ];
 
-  float f = fEqualLookup[ osc->notenumber + (bend/0x2000) ] 
-          * bLookup14bit1semitone[ (bend%0x2000) +0x2000 ];
-          
+  } else {
+    int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth);
+
+    f = channels[osc->channel].tuning[ osc->notenumber + (bend>>13) ]
+      * bLookup14bit1semitone[ (bend&0x1FFF) +0x2000 ];
+  }
+
+  float f2 = 8192.0/f;
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
@@ -449,17 +485,16 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
     } else if (osc->amplitude < osc->velocity) osc->amplitude+=0.25;
 
 
-    osc->fm_phase += fm_freq*f;
-    if (osc->fm_phase>4.0f) osc->fm_phase-=4.0f;
-
+    osc->phase += f ;
+    if (osc->phase>8192.0f) osc->phase-=8192.0f;
 
     osc->fm_amplitude *= fm_decay;
 
-    osc->phase += f  + sinLut[(int)(osc->fm_phase *2048)]*osc->fm_amplitude;
-    while (osc->phase>4.0f) osc->phase-=4.0f;
-    while (osc->phase<0.0f) osc->phase+=4.0f;
+    osc->fm_phase = mainLut[(int)(osc->phase)] * osc->fm_amplitude *f2;
+    while (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
+    while (osc->fm_phase<0.0f) osc->fm_phase+=8192.0f;
 
-    buf[i] += mainLut[(int)(osc->phase *2048)] * osc->amplitude;
+    buf[i] += sinLut[(int)(osc->fm_phase)] * osc->amplitude;
 
   }
 
