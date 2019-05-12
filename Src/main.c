@@ -385,7 +385,7 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
   uint8_t i, oldest;
   uint32_t mintime=0xffffffff;
 
-  for (i=POLYPHONY; i-=2;) {
+  for (i=0; i<POLYPHONY; i+=2) {
     if (0==oscillators[i].alive) break;
     if (oscillators[i].starttime < mintime) {
       oldest = i;
@@ -393,7 +393,7 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
     }
   }
 
-  if (oscillators[i].alive!=0) {
+  if (i==POLYPHONY) {
     i = oldest;
   }
 
@@ -414,7 +414,7 @@ void noteOffDualOsc(uint8_t n, uint8_t chan) {
 // find oscillator with same channel and note number
 // kill it
 
-  for (uint8_t i=POLYPHONY; i-=2;) {
+  for (uint8_t i=0; i<POLYPHONY; i+=2) {
     if (oscillators[i].alive && !oscillators[i].released && oscillators[i].notenumber==n && oscillators[i].channel==chan && !oscillators[i].sustained) {
       if (channels[chan].sustain) {
         oscillators[i].sustained=1;
@@ -663,7 +663,7 @@ void generateIntoBufferStereo(uint16_t* buf, uint16_t* buf2){
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048; buf2[i]=2048;}
 
-  for (uint8_t i=POLYPHONY; i-=2;) {
+  for (uint8_t i=0; i<POLYPHONY; i+=2) {
     if (oscillators[i].alive)
       doOscillatorStereo(&oscillators[i], &oscillators[i+1], buf, buf2);
   }
