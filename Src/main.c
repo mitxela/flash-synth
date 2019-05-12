@@ -34,6 +34,7 @@ static void Error_Handler(void);
 #define DEFAULT_PB_RANGE 2
 
 uint16_t buffer[BUFFERSIZE*2] = {0};
+uint16_t buffer2[BUFFERSIZE*2] = {0};
 
   float fm_freq;
   float fm_depth;
@@ -74,7 +75,19 @@ float mainLut[8192]={0};
 
 void oscAlgo1(struct oscillator* osc, uint16_t* buf);
 void oscAlgo2(struct oscillator* osc, uint16_t* buf);
-void (*doOscillator)(struct oscillator* osc, uint16_t* buf) = &oscAlgo2;
+void (*doOscillator)(struct oscillator* osc, uint16_t* buf) = &oscAlgo1;
+
+void generateIntoBufferMono(uint16_t* buf, uint16_t* buf2);
+void generateIntoBufferStereo(uint16_t* buf, uint16_t* buf2);
+void (*generateIntoBuffer)(uint16_t* buf, uint16_t* buf2) = &generateIntoBufferMono;
+
+void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan);
+void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan);
+void (*noteOn)(uint8_t n, uint8_t vel, uint8_t chan) = &noteOnDualOsc;
+
+void noteOffFullPoly(uint8_t n, uint8_t chan);
+void noteOffDualOsc(uint8_t n, uint8_t chan);
+void (*noteOff)(uint8_t n, uint8_t chan) = &noteOffDualOsc;
 
 
 void antialias(unsigned int radius){
@@ -218,8 +231,38 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       targetWave = i;
     break;
     case 26:
-      aa = i;
-      //targetWave = i;
+      //aa = i;
+
+
+              // Completely stop and reinit the timer, otherwise there is a risk of 
+              // desyncing and missing the first/last sample in each buffer
+              TIM6_Config(); 
+
+              if (HAL_DAC_Stop_DMA(&DacHandle, DAC_CHANNEL_1) != HAL_OK)
+                Error_Handler();
+              if (HAL_DAC_Stop_DMA(&DacHandle, DAC_CHANNEL_2) != HAL_OK)
+                Error_Handler();
+
+              if (HAL_DAC_ConfigChannel(&DacHandle, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+                Error_Handler();
+              if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_1, (uint32_t *)buffer, BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
+                Error_Handler();
+              if (HAL_DAC_ConfigChannel(&DacHandle, &sConfig, DAC_CHANNEL_2) != HAL_OK)
+                Error_Handler();
+              if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_2, 
+                    (i>64)? ((uint32_t *)buffer2) : ((uint32_t *)buffer), 
+                    BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
+                Error_Handler();
+
+              ///////////////
+
+//{for (int i=POLYPHONY;i--;) oscillators[i].alive=0;}
+
+              generateIntoBuffer = (i>64)? &generateIntoBufferStereo : &generateIntoBufferMono;
+              noteOn = (i>64)? &noteOnDualOsc : &noteOnFullPoly;
+              noteOff = (i>64)? &noteOffDualOsc : &noteOffFullPoly;
+
+      
     break;
 
 
@@ -286,7 +329,7 @@ void loadPatch(uint8_t p){
     parameterChange(0, paramMap[i], bPatches[p][i]);
 }
 
-void noteOn(uint8_t n, uint8_t vel, uint8_t chan) {
+void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
 
 // find a free oscillator
 // set it up
@@ -316,14 +359,62 @@ void noteOn(uint8_t n, uint8_t vel, uint8_t chan) {
   oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
   //oscillators[i].phase = 1.0f;
 
-
 }
 
-void noteOff(uint8_t n, uint8_t chan) {
+void noteOffFullPoly(uint8_t n, uint8_t chan) {
 // find oscillator with same channel and note number
 // kill it
 
   for (uint8_t i=POLYPHONY; i--;) {
+    if (oscillators[i].alive && !oscillators[i].released && oscillators[i].notenumber==n && oscillators[i].channel==chan && !oscillators[i].sustained) {
+      if (channels[chan].sustain) {
+        oscillators[i].sustained=1;
+      } else {
+        oscillators[i].released=1;
+      }
+      break;
+    }
+  }
+
+}
+
+void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
+
+// find a free oscillator
+// set it up
+  uint8_t i, oldest;
+  uint32_t mintime=0xffffffff;
+
+  for (i=POLYPHONY; i-=2;) {
+    if (0==oscillators[i].alive) break;
+    if (oscillators[i].starttime < mintime) {
+      oldest = i;
+      mintime = oscillators[i].starttime;
+    }
+  }
+
+  if (oscillators[i].alive!=0) {
+    i = oldest;
+  }
+
+  oscillators[i].alive = 1;
+  oscillators[i].starttime = timestamp++;
+  oscillators[i].released = 0;
+  oscillators[i].sustained = 0;
+  oscillators[i].notenumber=n;
+  oscillators[i].channel=chan;
+  oscillators[i].velocity=vel;
+
+  oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+  //oscillators[i].phase = 1.0f;
+
+}
+
+void noteOffDualOsc(uint8_t n, uint8_t chan) {
+// find oscillator with same channel and note number
+// kill it
+
+  for (uint8_t i=POLYPHONY; i-=2;) {
     if (oscillators[i].alive && !oscillators[i].released && oscillators[i].notenumber==n && oscillators[i].channel==chan && !oscillators[i].sustained) {
       if (channels[chan].sustain) {
         oscillators[i].sustained=1;
@@ -502,20 +593,80 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 }
 
 
-void generateIntoBuffer(uint16_t* buf){
+void doOscillatorStereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2) {
+
+  osc->lfo_phase += lfo_freq;
+  if (osc->lfo_phase>8192.0f) osc->lfo_phase-=8192.0f;
+
+  float f, fr;
+
+  if (channels[osc->channel].pbSensitivity == 1) {
+
+    // We should probably enforce that LFO depth is never more than a semitone
+    f = channels[osc->channel].tuning[ osc->notenumber]
+      * bLookup14bit1semitone[ channels[osc->channel].bend +0x2000 ]
+      * bLookup14bit1semitone[ (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth) +0x2000 ];
+
+  } else {
+    int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth);
+
+    f = channels[osc->channel].tuning[ osc->notenumber + (bend>>13) ]
+      * bLookup14bit1semitone[ (bend&0x1FFF) +0x2000 ];
+  }
+
+  fr = f*1.01;
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+
+    //Simple envelope
+    if (osc->released) {
+      osc->amplitude-=0.25;
+      if (osc->amplitude <= 0.0) {osc->alive =0;osc->amplitude=0;}
+    } else if (osc->amplitude < osc->velocity) osc->amplitude+=0.25;
+
+
+    osc->fm_phase += fm_freq*f;
+    if (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
+    osc2->fm_phase += fm_freq*fr;
+    if (osc2->fm_phase>8192.0f) osc2->fm_phase-=8192.0f;
+
+    osc->fm_amplitude *= fm_decay;
+
+    osc->phase  += f  + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude;
+    osc2->phase += fr + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude;
+    while (osc->phase>8192.0f) osc->phase-=8192.0f;
+    while (osc->phase<0.0f) osc->phase+=8192.0f;
+    while (osc2->phase>8192.0f) osc2->phase-=8192.0f;
+    while (osc2->phase<0.0f) osc2->phase+=8192.0f;
+
+    buf[i] += mainLut[(int)(osc->phase)] * osc->amplitude;
+    buf2[i]+= mainLut[(int)(osc2->phase)]* osc->amplitude;
+
+  }
+
+}
+
+
+
+
+void generateIntoBufferMono(uint16_t* buf, uint16_t* buf2){
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048;}
 
   for (uint8_t i=POLYPHONY; i--;) {
     if (oscillators[i].alive)
       doOscillator(&oscillators[i], buf);
-
   }
+}
 
+void generateIntoBufferStereo(uint16_t* buf, uint16_t* buf2){
 
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048; buf2[i]=2048;}
 
-
-
+  for (uint8_t i=POLYPHONY; i-=2;) {
+    if (oscillators[i].alive)
+      doOscillatorStereo(&oscillators[i], &oscillators[i+1], buf, buf2);
+  }
 }
 
 
@@ -534,7 +685,7 @@ void DMA1_Channel3_IRQHandler(void)
   if ((RESET != (flag_it & (DMA_FLAG_HT1 << hdma->ChannelIndex))) && (RESET != (source_it & DMA_IT_HT))) {
     hdma->DmaBaseAddress->IFCR = (DMA_ISR_HTIF1 << hdma->ChannelIndex);  //Clear Flag
 
-    generateIntoBuffer(&buffer[0]);
+    generateIntoBuffer(&buffer[0], &buffer2[0]);
 
   }
 
@@ -543,7 +694,7 @@ void DMA1_Channel3_IRQHandler(void)
 
     hdma->DmaBaseAddress->IFCR = (DMA_ISR_TCIF1 << hdma->ChannelIndex);  //Clear Flag
 
-    generateIntoBuffer(&buffer[BUFFERSIZE]);
+    generateIntoBuffer(&buffer[BUFFERSIZE], &buffer2[BUFFERSIZE]);
 
 
   }
