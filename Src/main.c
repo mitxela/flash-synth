@@ -40,7 +40,8 @@ uint16_t buffer2[BUFFERSIZE*2] = {0};
   float fm_depth;
   float fm_decay;
   float lfo_freq;
-uint8_t aa = 64;
+  float detune;
+uint8_t aa = 8;
 
 struct channel {
   uint8_t volume;
@@ -202,6 +203,10 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       lfo_freq = 204.8 + (float)(i*4);
     break;
 
+    case 15:
+      detune=1.0 + ((float)(i)/5080);
+    break;
+
     case 20:
       fm_freq_cc[0] = i;
       fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
@@ -323,7 +328,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
 void loadPatch(uint8_t p){
   // Link between byte position in the patch file and CC number
   const uint8_t paramMap[64] = {
-    20,21,22,23,24,25,76 
+    20,21,22,23,24,25,76,15 
   };
   for (uint8_t i=0;i<64;i++)
     parameterChange(0, paramMap[i], bPatches[p][i]);
@@ -495,9 +500,7 @@ void USART1_IRQHandler(void) {
 
 }
 
-
-
-void oscAlgo1(struct oscillator* osc, uint16_t* buf){
+inline float calculateFrequency(struct oscillator* osc){
 
   osc->lfo_phase += lfo_freq;
   if (osc->lfo_phase>8192.0f) osc->lfo_phase-=8192.0f;
@@ -517,6 +520,13 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
     f = channels[osc->channel].tuning[ osc->notenumber + (bend>>13) ]
       * bLookup14bit1semitone[ (bend&0x1FFF) +0x2000 ];
   }
+
+  return f;
+}
+
+void oscAlgo1(struct oscillator* osc, uint16_t* buf){
+
+  float f = calculateFrequency(osc);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
@@ -546,24 +556,7 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
 void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
-  osc->lfo_phase += lfo_freq;
-  if (osc->lfo_phase>8192.0f) osc->lfo_phase-=8192.0f;
-
-  float f;
-
-  if (channels[osc->channel].pbSensitivity == 1) {
-
-    // We should probably enforce that LFO depth is never more than a semitone
-    f = channels[osc->channel].tuning[ osc->notenumber]
-      * bLookup14bit1semitone[ channels[osc->channel].bend +0x2000 ]
-      * bLookup14bit1semitone[ (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth) +0x2000 ];
-
-  } else {
-    int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth);
-
-    f = channels[osc->channel].tuning[ osc->notenumber + (bend>>13) ]
-      * bLookup14bit1semitone[ (bend&0x1FFF) +0x2000 ];
-  }
+  float f = calculateFrequency(osc);
 
   float f2 = 8192.0/f;
 
@@ -595,26 +588,9 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
 void doOscillatorStereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2) {
 
-  osc->lfo_phase += lfo_freq;
-  if (osc->lfo_phase>8192.0f) osc->lfo_phase-=8192.0f;
+  float f = calculateFrequency(osc);
 
-  float f, fr;
-
-  if (channels[osc->channel].pbSensitivity == 1) {
-
-    // We should probably enforce that LFO depth is never more than a semitone
-    f = channels[osc->channel].tuning[ osc->notenumber]
-      * bLookup14bit1semitone[ channels[osc->channel].bend +0x2000 ]
-      * bLookup14bit1semitone[ (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth) +0x2000 ];
-
-  } else {
-    int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth);
-
-    f = channels[osc->channel].tuning[ osc->notenumber + (bend>>13) ]
-      * bLookup14bit1semitone[ (bend&0x1FFF) +0x2000 ];
-  }
-
-  fr = f*1.01;
+  float fr = f*detune;
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
