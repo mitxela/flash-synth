@@ -40,7 +40,8 @@ uint16_t buffer2[BUFFERSIZE*2] = {0};
   float fm_depth;
   float fm_decay;
   float lfo_freq;
-  float detune;
+  float detuneUp;
+  float detuneDown;
 uint8_t aa = 8;
 
 struct channel {
@@ -159,12 +160,9 @@ void setWaveform(uint8_t id) {
       mainLut[i]=-0.5;
     }
     break;
-  case 6: // 
-    for (uint16_t i=0;i<4096;i++) {
-      mainLut[i]=0.5;
-    }
-    for (uint16_t i=4096;i<8192;i++) {
-      mainLut[i]=-0.5;
+  case 6: // fifth square
+    for (uint16_t i=0;i<8192;i++) {
+      mainLut[i]= (((i*2)&8191) >4192? 0.25:-0.25) + (((i*3)&8191) >4192? 0.25:-0.25);
     }
     break;
 
@@ -203,8 +201,11 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       lfo_freq = 204.8 + (float)(i*4);
     break;
 
-    case 15:
-      detune=1.0 + ((float)(i)/5080);
+    case 15:{
+        float detune= ((float)(i)/10160.0);
+        detuneUp = 1.0 + detune;
+        detuneDown = 1.0 - detune;
+      }
     break;
 
     case 20:
@@ -590,7 +591,8 @@ void doOscillatorStereo(struct oscillator* osc, struct oscillator* osc2, uint16_
 
   float f = calculateFrequency(osc);
 
-  float fr = f*detune;
+  float fr = f*detuneUp;
+  float fl = f*detuneDown;
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
@@ -601,14 +603,14 @@ void doOscillatorStereo(struct oscillator* osc, struct oscillator* osc2, uint16_
     } else if (osc->amplitude < osc->velocity) osc->amplitude+=0.25;
 
 
-    osc->fm_phase += fm_freq*f;
+    osc->fm_phase += fm_freq*fl;
     if (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
     osc2->fm_phase += fm_freq*fr;
     if (osc2->fm_phase>8192.0f) osc2->fm_phase-=8192.0f;
 
     osc->fm_amplitude *= fm_decay;
 
-    osc->phase  += f  + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude;
+    osc->phase  += fl + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude;
     osc2->phase += fr + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude;
     while (osc->phase>8192.0f) osc->phase-=8192.0f;
     while (osc->phase<0.0f) osc->phase+=8192.0f;
