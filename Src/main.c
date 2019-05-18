@@ -42,6 +42,12 @@ uint16_t buffer2[BUFFERSIZE*2] = {0};
   float lfo_freq;
   float detuneUp;
   float detuneDown;
+
+float releaseRate = -0.0025;
+float attackRate = 0.25;
+float decayRate = 0.25;
+float sustainLevel = 0.5;
+
 uint8_t aa = 8;
 
 struct channel {
@@ -199,6 +205,19 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     break;
     case 76:
       lfo_freq = 204.8 + (float)(i*4);
+    break;
+
+    case 73: //Attack time
+      attackRate = (float)((i+1)*0.001);
+    break;
+    case 75: //Decay time
+      decayRate = -(float)((i+1)*0.001);
+    break;
+    case 74: //Sustain time
+      sustainLevel = (float)((i+1)*0.001);
+    break;
+    case 72: //Release time
+      releaseRate = -(float)((i+1)*0.001);
     break;
 
     case 15:{
@@ -525,18 +544,33 @@ inline float calculateFrequency(struct oscillator* osc){
   return f;
 }
 
+// Generate a cachable envelope delta. Warp the edges so that state transistions always happen at the buffer boundaries
+inline float envelope(struct oscillator* osc){
+  float d = 0.0;
+
+  if (osc->released) {
+    d = releaseRate;
+    if (osc->amplitude < -releaseRate*BUFFERSIZE) {
+      d = - osc->amplitude / BUFFERSIZE;
+      osc->alive =0;
+    }
+  } else if (osc->amplitude < osc->velocity){
+    d = attackRate;
+    if (osc->amplitude > osc->velocity - attackRate*BUFFERSIZE) d = (osc->velocity - osc->amplitude)/BUFFERSIZE;
+  }
+
+  return d;
+}
+
+
 void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
   float f = calculateFrequency(osc);
+  float ampDiff = envelope(osc);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
-    //Simple envelope
-    if (osc->released) {
-      osc->amplitude-=0.25;
-      if (osc->amplitude <= 0.0) {osc->alive =0;osc->amplitude=0;}
-    } else if (osc->amplitude < osc->velocity) osc->amplitude+=0.25;
-
+    osc->amplitude += ampDiff;
 
     osc->fm_phase += fm_freq*f;
     if (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
@@ -561,13 +595,11 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
   float f2 = 8192.0/f;
 
+  float ampDiff = envelope(osc);
+
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
-    //Simple envelope
-    if (osc->released) {
-      osc->amplitude-=0.25;
-      if (osc->amplitude <= 0.0) {osc->alive =0;osc->amplitude=0;}
-    } else if (osc->amplitude < osc->velocity) osc->amplitude+=0.25;
+    osc->amplitude += ampDiff;
 
 
     osc->phase += f ;
@@ -594,14 +626,11 @@ void doOscillatorStereo(struct oscillator* osc, struct oscillator* osc2, uint16_
   float fr = f*detuneUp;
   float fl = f*detuneDown;
 
+  float ampDiff = envelope(osc);
+
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
-    //Simple envelope
-    if (osc->released) {
-      osc->amplitude-=0.25;
-      if (osc->amplitude <= 0.0) {osc->alive =0;osc->amplitude=0;}
-    } else if (osc->amplitude < osc->velocity) osc->amplitude+=0.25;
-
+    osc->amplitude += ampDiff;
 
     osc->fm_phase += fm_freq*fl;
     if (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
