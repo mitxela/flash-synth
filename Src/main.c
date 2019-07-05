@@ -48,7 +48,7 @@ float attackRate = 0.25;
 float decayRate = 0.25;
 float sustainLevel = 0.5;
 
-uint8_t aa = 8;
+uint8_t aa = 16;
 
 struct channel {
   uint8_t volume;
@@ -208,7 +208,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     break;
 
     case 73: //Attack time
-      attackRate = (float)((i+1)*0.001);
+      attackRate = (0.128/(float)(i+1));
     break;
     case 75: //Decay time
       decayRate = -(float)((i+1)*0.001);
@@ -217,7 +217,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       sustainLevel = (float)((i+1)*0.001);
     break;
     case 72: //Release time
-      releaseRate = -(float)((i+1)*0.001);
+      releaseRate = -(0.128/(float)(i+1));
     break;
 
     case 15:{
@@ -512,7 +512,6 @@ void USART1_IRQHandler(void) {
         break;
       }
 
-
       bytenumber =1; //running status
     }
   }
@@ -544,7 +543,7 @@ inline float calculateFrequency(struct oscillator* osc){
   return f;
 }
 
-// Generate a cachable envelope delta. Warp the edges so that state transistions always happen at the buffer boundaries
+// Generate a cachable envelope delta. Warp the edges so that state transitions always happen at the buffer boundaries
 inline float envelope(struct oscillator* osc){
   float d = 0.0;
 
@@ -556,7 +555,9 @@ inline float envelope(struct oscillator* osc){
     }
   } else if (osc->amplitude < osc->velocity){
     d = attackRate;
-    if (osc->amplitude > osc->velocity - attackRate*BUFFERSIZE) d = (osc->velocity - osc->amplitude)/BUFFERSIZE;
+    if (osc->amplitude > osc->velocity - attackRate*BUFFERSIZE) {
+      d = (osc->velocity - osc->amplitude)/BUFFERSIZE;
+    }
   }
 
   return d;
@@ -605,9 +606,9 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
     osc->phase += f ;
     if (osc->phase>8192.0f) osc->phase-=8192.0f;
 
-    osc->fm_amplitude *= fm_decay;
+    //osc->fm_amplitude *= fm_decay;
 
-    osc->fm_phase = mainLut[(int)(osc->phase)] * osc->fm_amplitude *f2;
+    osc->fm_phase = mainLut[(int)(osc->phase)] * osc->amplitude *f2;
     while (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
     while (osc->fm_phase<0.0f) osc->fm_phase+=8192.0f;
 
