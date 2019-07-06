@@ -609,8 +609,8 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
     //osc->fm_amplitude *= fm_decay;
 
     osc->fm_phase = mainLut[(int)(osc->phase)] * osc->amplitude *f2;
-    while (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
     while (osc->fm_phase<0.0f) osc->fm_phase+=8192.0f;
+    while (osc->fm_phase>=8192.0f) osc->fm_phase-=8192.0f;
 
     buf[i] += sinLut[(int)(osc->fm_phase)] * osc->amplitude;
 
