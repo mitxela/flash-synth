@@ -372,11 +372,14 @@ void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
     }
   }
 
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
   if (oscillators[i].alive!=0) {
     i = (similar==255)?oldest:similar;
     oscillators[i].amplitude=0;
     oscillators[i].phase=0;
   }
+  #pragma GCC diagnostic pop
 
   oscillators[i].alive = 1;
   oscillators[i].starttime = timestamp++;
