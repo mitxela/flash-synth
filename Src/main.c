@@ -358,11 +358,14 @@ void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
 
 // find a free oscillator
 // set it up
-  uint8_t i, oldest;
+  uint8_t i, oldest, similar = 255;
   uint32_t mintime=0xffffffff;
 
   for (i=POLYPHONY; i--;) {
     if (0==oscillators[i].alive) break;
+    if (oscillators[i].notenumber == n) {
+      similar = i;
+    }
     if (oscillators[i].starttime < mintime) {
       oldest = i;
       mintime = oscillators[i].starttime;
@@ -370,7 +373,7 @@ void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
   }
 
   if (oscillators[i].alive!=0) {
-    i = oldest;
+    i = (similar==255)?oldest:similar;
     oscillators[i].amplitude=0;
     oscillators[i].phase=0;
   }
@@ -409,11 +412,14 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
 
 // find a free oscillator
 // set it up
-  uint8_t i, oldest;
+  uint8_t i, oldest, similar=255;
   uint32_t mintime=0xffffffff;
 
   for (i=0; i<POLYPHONY; i+=2) {
     if (0==oscillators[i].alive) break;
+    if (oscillators[i].notenumber == n) {
+      similar = i;
+    }
     if (oscillators[i].starttime < mintime) {
       oldest = i;
       mintime = oscillators[i].starttime;
@@ -421,7 +427,7 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
   }
 
   if (i==POLYPHONY) {
-    i = oldest;
+    i = (similar==255)?oldest:similar;
     oscillators[i].amplitude=0;
     oscillators[i].phase=0;
   }
