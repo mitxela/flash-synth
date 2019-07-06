@@ -139,7 +139,7 @@ LIBDIR =
 LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
 
 # default action: build all
-all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin
+all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin $(BUILD_DIR)/$(TARGET).pgm
 
 
 #######################################
@@ -166,10 +166,14 @@ $(BUILD_DIR)/$(TARGET).elf: $(OBJECTS) Makefile
 
 $(BUILD_DIR)/%.hex: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 	$(HEX) $< $@
-	
+
 $(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
-	$(BIN) $< $@	
-	
+	$(BIN) $< $@
+
+# Image to visualize memory usage
+$(BUILD_DIR)/%.pgm: $(BUILD_DIR)/%.bin
+	echo "P5 256 1024 255" > $@; cat $< >> $@
+
 $(BUILD_DIR):
 	mkdir $@		
 
