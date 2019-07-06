@@ -371,6 +371,8 @@ void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
 
   if (oscillators[i].alive!=0) {
     i = oldest;
+    oscillators[i].amplitude=0;
+    oscillators[i].phase=0;
   }
 
   oscillators[i].alive = 1;
@@ -420,6 +422,8 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
 
   if (i==POLYPHONY) {
     i = oldest;
+    oscillators[i].amplitude=0;
+    oscillators[i].phase=0;
   }
 
   oscillators[i].alive = 1;
