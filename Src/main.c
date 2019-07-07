@@ -12,7 +12,6 @@
 
 #define DAC_TIMER_PERIOD ((CPU_FREQ*1000000)/(44100))
 
-
 #include "lookupTables.h"
 #include "defaultPatches.h"
 
@@ -51,8 +50,8 @@ float sustainLevel = 0.5;
 uint8_t aa = 16;
 
 struct channel {
-  uint8_t volume;
   int32_t bend;
+  uint8_t volume;
   uint8_t RPNstack[4];
   uint8_t pbSensitivity;
   uint8_t mod;
@@ -65,6 +64,10 @@ struct oscillator {
   uint8_t channel;
   uint8_t notenumber;
   uint8_t velocity;
+
+  uint8_t stolen;
+  uint8_t stolenChannel;
+
   float phase;
   float amplitude;
   float fm_phase;
@@ -371,6 +374,8 @@ void loadPatch(uint8_t p){
     parameterChange(0, paramMap[i], bPatches[p][i]);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
 
 // find a free oscillator
@@ -389,26 +394,28 @@ void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
     }
   }
 
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+
   if (oscillators[i].alive!=0) {
     i = (similar==255)?oldest:similar;
-    //oscillators[i].amplitude=0;
-    //oscillators[i].phase=0;
+    oscillators[i].stolen=n;
+    oscillators[i].stolenChannel=chan;
+  } else {
+    oscillators[i].notenumber=n;
+    oscillators[i].channel=chan;
+
+    oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
   }
-  #pragma GCC diagnostic pop
 
   oscillators[i].alive = 1;
   oscillators[i].starttime = timestamp++;
   oscillators[i].released = 0;
   oscillators[i].sustained = 0;
-  oscillators[i].notenumber=n;
-  oscillators[i].channel=chan;
   oscillators[i].velocity=vel;
 
-  oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+  
 
 }
+#pragma GCC diagnostic pop
 
 void noteOffFullPoly(uint8_t n, uint8_t chan) {
 // find oscillator with same channel and note number
@@ -447,19 +454,24 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
 
   if (i==POLYPHONY) {
     i = (similar==255)?oldest:similar;
-    //oscillators[i].amplitude=0;
-    //oscillators[i].phase=0;
+    oscillators[i].stolen=n;
+    oscillators[i].stolenChannel=chan;
+  } else {
+    oscillators[i].notenumber=n;
+    oscillators[i].channel=chan;
+
+oscillators[i].stolen=0;
+
+    oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
   }
 
   oscillators[i].alive = 1;
   oscillators[i].starttime = timestamp++;
   oscillators[i].released = 0;
   oscillators[i].sustained = 0;
-  oscillators[i].notenumber=n;
-  oscillators[i].channel=chan;
   oscillators[i].velocity=vel;
 
-  oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+
 
 }
 
@@ -468,7 +480,12 @@ void noteOffDualOsc(uint8_t n, uint8_t chan) {
 // kill it
 
   for (uint8_t i=0; i<POLYPHONY; i+=2) {
-    if (oscillators[i].alive && !oscillators[i].released && oscillators[i].notenumber==n && oscillators[i].channel==chan && !oscillators[i].sustained) {
+    if ( oscillators[i].alive 
+     && !oscillators[i].released 
+     && oscillators[i].notenumber==n 
+     && oscillators[i].channel==chan 
+     && !oscillators[i].sustained
+     ){
       if (channels[chan].sustain) {
         oscillators[i].sustained=1;
       } else {
@@ -571,9 +588,18 @@ inline float calculateFrequency(struct oscillator* osc){
   return f;
 }
 
+inline float intEnvelope(struct oscillator* osc){
+  float d = - osc->fm_amplitude*(1-fm_decay);
+  return d;
+}
+
 // Generate a cachable envelope delta. Warp the edges so that state transitions always happen at the buffer boundaries
 inline float envelope(struct oscillator* osc){
   float d = 0.0;
+
+  if (osc->stolen) {
+    return -osc->amplitude /BUFFERSIZE;
+  }
 
   if (osc->released) {
     d = releaseRate;
@@ -591,10 +617,10 @@ inline float envelope(struct oscillator* osc){
   return d;
 }
 
-
 void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
   float f = calculateFrequency(osc);
+  float preAmpDiff = intEnvelope(osc);
   float ampDiff = envelope(osc);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
@@ -605,7 +631,7 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
     if (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
 
 
-    osc->fm_amplitude *= fm_decay;
+    osc->fm_amplitude += preAmpDiff;
 
     osc->phase += f  + sinLut[(int)(osc->fm_phase)]*osc->fm_amplitude;
     while (osc->phase>8192.0f) osc->phase-=8192.0f;
@@ -615,7 +641,12 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
   }
 
-
+  if (osc->stolen) {
+    osc->channel = osc->stolenChannel;
+    osc->notenumber = osc->stolen;
+    osc->stolen = 0;
+    osc->fm_amplitude = (osc->velocity/127.0)*fm_depth * fEqualLookup[ osc->notenumber ];
+  }
 }
 
 void oscAlgo2(struct oscillator* osc, uint16_t* buf){
@@ -644,7 +675,12 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
   }
 
-
+  if (osc->stolen) {
+    osc->channel = osc->stolenChannel;
+    osc->notenumber = osc->stolen;
+    osc->stolen = 0;
+    //osc->fm_amplitude = (osc->velocity/127.0)*fm_depth * fEqualLookup[ osc->notenumber ];
+  }
 }
 
 
@@ -655,6 +691,7 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
   float fr = f*detuneUp;
   float fl = f*detuneDown;
 
+  float preAmpDiff = intEnvelope(osc);
   float ampDiff = envelope(osc);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
@@ -666,7 +703,7 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
     osc2->fm_phase += fm_freq*fr;
     if (osc2->fm_phase>8192.0f) osc2->fm_phase-=8192.0f;
 
-    osc->fm_amplitude *= fm_decay;
+    osc->fm_amplitude += preAmpDiff;
 
     osc->phase  += fl + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude;
     osc2->phase += fr + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude;
@@ -678,6 +715,15 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
     buf[i] += mainLut[(int)(osc->phase)] * osc->amplitude;
     buf2[i]+= mainLut[(int)(osc2->phase)]* osc->amplitude;
 
+  }
+
+  if (osc->stolen) {
+//if (osc->amplitude<0) 
+//osc->amplitude=0;
+    osc->channel = osc->stolenChannel;
+    osc->notenumber = osc->stolen;
+    osc->stolen = 0;
+    osc->fm_amplitude = (osc->velocity/127.0)*fm_depth * fEqualLookup[ osc->notenumber ];
   }
 
 }
