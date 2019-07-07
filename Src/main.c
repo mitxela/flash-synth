@@ -81,9 +81,14 @@ uint8_t targetWave = 0;
 
 float mainLut[8192]={0};
 
-void oscAlgo1(struct oscillator* osc, uint16_t* buf);
-void oscAlgo2(struct oscillator* osc, uint16_t* buf);
-void (*doOscillator)(struct oscillator* osc, uint16_t* buf) = &oscAlgo1;
+typedef void mono_t(struct oscillator* osc, uint16_t* buf);
+mono_t oscAlgo1;
+mono_t oscAlgo2;
+mono_t *doOscillator = &oscAlgo1;
+
+typedef void stereo_t(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2);
+stereo_t oscAlgo1Stereo;
+stereo_t *doOscillatorStereo = &oscAlgo1Stereo;
 
 void generateIntoBufferMono(uint16_t* buf, uint16_t* buf2);
 void generateIntoBufferStereo(uint16_t* buf, uint16_t* buf2);
@@ -96,6 +101,40 @@ void (*noteOn)(uint8_t n, uint8_t vel, uint8_t chan) = &noteOnDualOsc;
 void noteOffFullPoly(uint8_t n, uint8_t chan);
 void noteOffDualOsc(uint8_t n, uint8_t chan);
 void (*noteOff)(uint8_t n, uint8_t chan) = &noteOffDualOsc;
+
+
+void configStereo(int stereo){
+
+  // static bool previousState=0;
+  // if (stereo == previousState) return;
+  // previousState = stereo;
+
+  // Completely stop and reinit the timer, otherwise there is a risk of 
+  // desyncing and missing the first/last sample in each buffer
+  TIM6_Config(); 
+
+  if (HAL_DAC_Stop_DMA(&DacHandle, DAC_CHANNEL_1) != HAL_OK)
+    Error_Handler();
+  if (HAL_DAC_Stop_DMA(&DacHandle, DAC_CHANNEL_2) != HAL_OK)
+    Error_Handler();
+
+  if (HAL_DAC_ConfigChannel(&DacHandle, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+    Error_Handler();
+  if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_1, (uint32_t *)buffer, BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
+    Error_Handler();
+  if (HAL_DAC_ConfigChannel(&DacHandle, &sConfig, DAC_CHANNEL_2) != HAL_OK)
+    Error_Handler();
+  if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_2, 
+        stereo ? ((uint32_t *)buffer2) : ((uint32_t *)buffer), 
+        BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
+    Error_Handler();
+
+  generateIntoBuffer = stereo ? &generateIntoBufferStereo : &generateIntoBufferMono;
+  noteOn = stereo ? &noteOnDualOsc : &noteOnFullPoly;
+  noteOff = stereo ? &noteOffDualOsc : &noteOffFullPoly;
+
+}
+
 
 
 void antialias(unsigned int radius){
@@ -259,33 +298,11 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       //aa = i;
 
 
-              // Completely stop and reinit the timer, otherwise there is a risk of 
-              // desyncing and missing the first/last sample in each buffer
-              TIM6_Config(); 
-
-              if (HAL_DAC_Stop_DMA(&DacHandle, DAC_CHANNEL_1) != HAL_OK)
-                Error_Handler();
-              if (HAL_DAC_Stop_DMA(&DacHandle, DAC_CHANNEL_2) != HAL_OK)
-                Error_Handler();
-
-              if (HAL_DAC_ConfigChannel(&DacHandle, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-                Error_Handler();
-              if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_1, (uint32_t *)buffer, BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
-                Error_Handler();
-              if (HAL_DAC_ConfigChannel(&DacHandle, &sConfig, DAC_CHANNEL_2) != HAL_OK)
-                Error_Handler();
-              if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_2, 
-                    (i>64)? ((uint32_t *)buffer2) : ((uint32_t *)buffer), 
-                    BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
-                Error_Handler();
-
-              ///////////////
+      configStereo(i>64);
 
 //{for (int i=POLYPHONY;i--;) oscillators[i].alive=0;}
 
-              generateIntoBuffer = (i>64)? &generateIntoBufferStereo : &generateIntoBufferMono;
-              noteOn = (i>64)? &noteOnDualOsc : &noteOnFullPoly;
-              noteOff = (i>64)? &noteOffDualOsc : &noteOffFullPoly;
+
 
       
     break;
@@ -376,8 +393,8 @@ void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
   #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
   if (oscillators[i].alive!=0) {
     i = (similar==255)?oldest:similar;
-    oscillators[i].amplitude=0;
-    oscillators[i].phase=0;
+    //oscillators[i].amplitude=0;
+    //oscillators[i].phase=0;
   }
   #pragma GCC diagnostic pop
 
@@ -390,7 +407,6 @@ void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
   oscillators[i].velocity=vel;
 
   oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
-  //oscillators[i].phase = 1.0f;
 
 }
 
@@ -431,8 +447,8 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
 
   if (i==POLYPHONY) {
     i = (similar==255)?oldest:similar;
-    oscillators[i].amplitude=0;
-    oscillators[i].phase=0;
+    //oscillators[i].amplitude=0;
+    //oscillators[i].phase=0;
   }
 
   oscillators[i].alive = 1;
@@ -444,7 +460,6 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
   oscillators[i].velocity=vel;
 
   oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
-  //oscillators[i].phase = 1.0f;
 
 }
 
@@ -633,7 +648,7 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 }
 
 
-void doOscillatorStereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2) {
+void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2) {
 
   float f = calculateFrequency(osc);
 
