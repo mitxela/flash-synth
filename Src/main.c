@@ -79,34 +79,45 @@ struct oscillator {
   unsigned sustained:1;
 } oscillators[POLYPHONY];
 
+// TODO: unionize this with oscillator memory (if we get short of ram)
+uint8_t monoNoteStack[128];
+uint8_t monoNoteNow=0;
+uint8_t monoNoteEnd=0;
+
 uint32_t timestamp = 0;
 uint8_t targetWave = 0;
 
 float mainLut[8192]={0};
 
-typedef void mono_t(struct oscillator* osc, uint16_t* buf);
-mono_t oscAlgo1;
-mono_t oscAlgo2;
-mono_t *doOscillator = &oscAlgo1;
+typedef void doOsc_t(struct oscillator* osc, uint16_t* buf);
+doOsc_t oscAlgo1;
+doOsc_t oscAlgo2;
+doOsc_t *doOscillator = &oscAlgo1;
 
-typedef void stereo_t(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2);
-stereo_t oscAlgo1Stereo;
-stereo_t *doOscillatorStereo = &oscAlgo1Stereo;
+typedef void doOscStereo_t(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2);
+doOscStereo_t oscAlgo1Stereo;
+doOscStereo_t *doOscillatorStereo = &oscAlgo1Stereo;
 
-void generateIntoBufferMono(uint16_t* buf, uint16_t* buf2);
-void generateIntoBufferStereo(uint16_t* buf, uint16_t* buf2);
-void (*generateIntoBuffer)(uint16_t* buf, uint16_t* buf2) = &generateIntoBufferMono;
+typedef void generateIntoBuffer_t(uint16_t* buf, uint16_t* buf2);
+generateIntoBuffer_t generateIntoBufferFullPoly;
+generateIntoBuffer_t generateIntoBufferDualOsc;
+generateIntoBuffer_t generateIntoBufferMonophonic;
+generateIntoBuffer_t *generateIntoBuffer = &generateIntoBufferFullPoly;
 
-void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan);
-void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan);
-void (*noteOn)(uint8_t n, uint8_t vel, uint8_t chan) = &noteOnDualOsc;
+typedef void noteOn_t(uint8_t n, uint8_t vel, uint8_t chan);
+noteOn_t noteOnFullPoly;
+noteOn_t noteOnDualOsc;
+noteOn_t noteOnMonophonic;
+noteOn_t *noteOn = &noteOnDualOsc;
 
-void noteOffFullPoly(uint8_t n, uint8_t chan);
-void noteOffDualOsc(uint8_t n, uint8_t chan);
-void (*noteOff)(uint8_t n, uint8_t chan) = &noteOffDualOsc;
+typedef void noteOff_t(uint8_t n, uint8_t chan);
+noteOff_t noteOffFullPoly;
+noteOff_t noteOffDualOsc;
+noteOff_t noteOffMonophonic;
+noteOff_t *noteOff = &noteOffDualOsc;
 
 
-void configStereo(int stereo){
+void setStereo(int stereo){
 
   // static bool previousState=0;
   // if (stereo == previousState) return;
@@ -131,10 +142,6 @@ void configStereo(int stereo){
         stereo ? ((uint32_t *)buffer2) : ((uint32_t *)buffer), 
         BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
     Error_Handler();
-
-  generateIntoBuffer = stereo ? &generateIntoBufferStereo : &generateIntoBufferMono;
-  noteOn = stereo ? &noteOnDualOsc : &noteOnFullPoly;
-  noteOff = stereo ? &noteOffDualOsc : &noteOffFullPoly;
 
 }
 
@@ -291,7 +298,40 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       fm_decay=0.9995 + ((float)(i)/254000);
     break;
     case 24:
-      doOscillator = i>64? &oscAlgo2 : &oscAlgo1;
+      {
+        for (int i=POLYPHONY;i--;) oscillators[i].alive=0;
+        switch (i){
+          case 1:
+            doOscillatorStereo = &oscAlgo1Stereo;
+            generateIntoBuffer = &generateIntoBufferDualOsc;
+            noteOn = &noteOnDualOsc;
+            noteOff = &noteOffDualOsc;
+            setStereo(1);
+            break;
+          case 2:
+            doOscillator = &oscAlgo2;
+            generateIntoBuffer = &generateIntoBufferFullPoly;
+            noteOn = &noteOnFullPoly;
+            noteOff = &noteOffFullPoly;
+            setStereo(0);
+            break;
+
+          case 4:
+            //doOscillatorStereo = &oscAlgo3;
+            generateIntoBuffer = &generateIntoBufferMonophonic;
+            noteOn = &noteOnMonophonic;
+            noteOff = &noteOffMonophonic;
+            setStereo(1);
+            break;
+
+          default:
+            doOscillator = &oscAlgo1;
+            generateIntoBuffer = &generateIntoBufferFullPoly;
+            noteOn = &noteOnFullPoly;
+            noteOff = &noteOffFullPoly;
+            setStereo(0);
+        }
+      }
     break;
 
     case 25:
@@ -301,9 +341,9 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       //aa = i;
 
 
-      configStereo(i>64);
+      
 
-//{for (int i=POLYPHONY;i--;) oscillators[i].alive=0;}
+
 
 
 
@@ -493,6 +533,33 @@ void noteOffDualOsc(uint8_t n, uint8_t chan) {
       }
       break;
     }
+  }
+
+}
+
+void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
+
+  monoNoteStack[monoNoteEnd++] = n;
+
+  oscillators[0].notenumber=n;
+  oscillators[0].velocity=vel;
+  oscillators[0].channel=chan;
+  oscillators[0].amplitude=(float)vel;
+
+}
+void noteOffMonophonic(uint8_t n, uint8_t chan) {
+
+
+  for (int i=0; i<monoNoteEnd; i++){
+    if (monoNoteStack[i] == n) {
+      while (i<monoNoteEnd) {monoNoteStack[i]=monoNoteStack[i+1];i++;}
+      monoNoteEnd--;
+    }
+  }
+  if (monoNoteEnd) {
+    oscillators[0].notenumber=monoNoteStack[monoNoteEnd-1];
+  } else {
+    oscillators[0].amplitude=0;
   }
 
 }
@@ -731,7 +798,7 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 
 
 
-void generateIntoBufferMono(uint16_t* buf, uint16_t* buf2){
+void generateIntoBufferFullPoly(uint16_t* buf, uint16_t* buf2){
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048;}
 
@@ -741,7 +808,7 @@ void generateIntoBufferMono(uint16_t* buf, uint16_t* buf2){
   }
 }
 
-void generateIntoBufferStereo(uint16_t* buf, uint16_t* buf2){
+void generateIntoBufferDualOsc(uint16_t* buf, uint16_t* buf2){
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048; buf2[i]=2048;}
 
@@ -751,6 +818,28 @@ void generateIntoBufferStereo(uint16_t* buf, uint16_t* buf2){
   }
 }
 
+void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
+
+//  for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048; buf2[i]=2048;}
+
+  struct oscillator* osc= &oscillators[0];
+  struct oscillator* osc2= &oscillators[1];
+
+  float f = calculateFrequency(osc);
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+    osc->phase += f ;
+    if (osc->phase>8192.0f) osc->phase-=8192.0f;
+    osc2->phase += f ;
+    if (osc2->phase>8192.0f) osc2->phase-=8192.0f;
+
+//osc->amplitude=64.0;
+
+    buf[i]  = 2048+mainLut[(int)(osc->phase)] * osc->amplitude;
+    buf2[i] = 2048+mainLut[(int)(osc2->phase)] * osc->amplitude;
+  }
+
+}
 
 
 void DMA1_Channel3_IRQHandler(void)
