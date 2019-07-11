@@ -83,6 +83,7 @@ struct oscillator {
 uint8_t monoNoteStack[128];
 uint8_t monoNoteNow=0;
 uint8_t monoNoteEnd=0;
+uint8_t monoNoteReleaseTimer=0;
 
 uint32_t timestamp = 0;
 uint8_t targetWave = 0;
@@ -539,27 +540,38 @@ void noteOffDualOsc(uint8_t n, uint8_t chan) {
 
 void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
 
+  if (oscillators[0].released) monoNoteEnd=0;
+
   monoNoteStack[monoNoteEnd++] = n;
+  monoNoteStack[monoNoteEnd]=0;
 
   oscillators[0].notenumber=n;
   oscillators[0].velocity=vel;
   oscillators[0].channel=chan;
-  oscillators[0].amplitude=(float)vel;
+  oscillators[0].released=0;
+  //oscillators[0].amplitude=(float)vel;
 
 }
 void noteOffMonophonic(uint8_t n, uint8_t chan) {
-
+  monoNoteReleaseTimer=0;
 
   for (int i=0; i<monoNoteEnd; i++){
     if (monoNoteStack[i] == n) {
-      while (i<monoNoteEnd) {monoNoteStack[i]=monoNoteStack[i+1];i++;}
+      while (i<monoNoteEnd) {
+        monoNoteStack[i]=monoNoteStack[i+1];
+        i++;
+      }
       monoNoteEnd--;
+      monoNoteStack[monoNoteEnd]=n;
     }
   }
   if (monoNoteEnd) {
-    oscillators[0].notenumber=monoNoteStack[monoNoteEnd-1];
+    if (monoNoteNow>=monoNoteEnd) oscillators[0].notenumber=monoNoteStack[monoNoteEnd-1];
   } else {
-    oscillators[0].amplitude=0;
+    oscillators[0].released=1;
+    while (monoNoteStack[monoNoteEnd]!=0) {
+      monoNoteEnd++;
+    }
   }
 
 }
@@ -825,15 +837,29 @@ void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
   struct oscillator* osc= &oscillators[0];
   struct oscillator* osc2= &oscillators[1];
 
+  static int timer=0;
+  if (++timer>15) {
+    if (++monoNoteNow>=monoNoteEnd) monoNoteNow=0;
+    osc->notenumber = monoNoteStack[monoNoteNow];
+    timer=0;
+  }
+  if (++monoNoteReleaseTimer>20 && osc->released==0){
+    monoNoteStack[monoNoteEnd]=0;
+    monoNoteReleaseTimer=0;
+  }
   float f = calculateFrequency(osc);
+  float fr = f*detuneUp;
+  float fl = f*detuneDown;
+
+  float ampDiff = envelope(osc);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
-    osc->phase += f ;
+    osc->phase += fl ;
     if (osc->phase>8192.0f) osc->phase-=8192.0f;
-    osc2->phase += f ;
+    osc2->phase += fr ;
     if (osc2->phase>8192.0f) osc2->phase-=8192.0f;
 
-//osc->amplitude=64.0;
+    osc->amplitude += ampDiff;
 
     buf[i]  = 2048+mainLut[(int)(osc->phase)] * osc->amplitude;
     buf2[i] = 2048+mainLut[(int)(osc2->phase)] * osc->amplitude;
