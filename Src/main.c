@@ -3,6 +3,7 @@
 #include "stm32l4xx_hal.h"
 #include "stm32l4xx_ll_usart.h"
 #include "math.h"
+#include "string.h"
 
 #define PI 3.14159265358979323846
 
@@ -31,6 +32,8 @@ static void Error_Handler(void);
 #define WAVE_AMPLITUDE 128
 
 #define DEFAULT_PB_RANGE 2
+
+#define ARPEG_SIZE 64
 
 uint16_t buffer[BUFFERSIZE*2] = {0};
 uint16_t buffer2[BUFFERSIZE*2] = {0};
@@ -80,9 +83,11 @@ struct oscillator {
 } oscillators[POLYPHONY];
 
 // TODO: unionize this with oscillator memory (if we get short of ram)
-uint8_t monoNoteStack[128];
-uint8_t monoNoteNow=0;
+uint8_t monoNoteStack[ARPEG_SIZE];
 uint8_t monoNoteEnd=0;
+uint8_t monoNoteReleaseStack[ARPEG_SIZE];
+uint8_t monoNoteReleaseEnd=0;
+uint8_t monoNoteNow=0;
 uint8_t monoNoteTimer=0;
 uint8_t monoNoteReleaseTimer=0;
 uint8_t arpegSpeed=10;
@@ -553,9 +558,12 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
   oscillators[0].channel=chan;
   oscillators[0].released=0;
 
+  memcpy(monoNoteReleaseStack, monoNoteStack, monoNoteEnd);
+  monoNoteReleaseEnd=monoNoteEnd;
+  monoNoteReleaseTimer=0;
 }
 void noteOffMonophonic(uint8_t n, uint8_t chan) {
-  monoNoteReleaseTimer=0;
+  monoNoteReleaseTimer=10;
 
   for (int i=0; i<monoNoteEnd; i++){
     if (monoNoteStack[i] == n) {
@@ -564,16 +572,15 @@ void noteOffMonophonic(uint8_t n, uint8_t chan) {
         i++;
       }
       monoNoteEnd--;
-      monoNoteStack[monoNoteEnd]=n;
     }
   }
   if (monoNoteEnd) {
-    if (monoNoteNow>=monoNoteEnd) oscillators[0].notenumber=monoNoteStack[monoNoteEnd-1];
+    if (monoNoteNow>=monoNoteEnd) monoNoteNow=monoNoteEnd-1;
+    oscillators[0].notenumber=monoNoteStack[monoNoteNow];
   } else {
     oscillators[0].released=1;
-    while (monoNoteStack[monoNoteEnd]!=0) {
-      monoNoteEnd++;
-    }
+    memcpy(monoNoteStack, monoNoteReleaseStack, monoNoteReleaseEnd);
+    monoNoteEnd=monoNoteReleaseEnd;
   }
 
 }
@@ -844,9 +851,9 @@ void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
     osc->notenumber = monoNoteStack[monoNoteNow];
     monoNoteTimer=0;
   }
-  if (++monoNoteReleaseTimer>20 && osc->released==0){
-    monoNoteStack[monoNoteEnd]=0;
-    monoNoteReleaseTimer=0;
+  if (monoNoteReleaseTimer && osc->released==0 && --monoNoteReleaseTimer==0){
+    memcpy(monoNoteReleaseStack, monoNoteStack, monoNoteEnd);
+    monoNoteReleaseEnd=monoNoteEnd;
   }
   float f = calculateFrequency(osc);
   float fr = f*detuneUp;
