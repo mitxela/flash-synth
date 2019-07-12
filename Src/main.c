@@ -83,7 +83,9 @@ struct oscillator {
 uint8_t monoNoteStack[128];
 uint8_t monoNoteNow=0;
 uint8_t monoNoteEnd=0;
+uint8_t monoNoteTimer=0;
 uint8_t monoNoteReleaseTimer=0;
+uint8_t arpegSpeed=10;
 
 uint32_t timestamp = 0;
 uint8_t targetWave = 0;
@@ -340,7 +342,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     break;
     case 26:
       //aa = i;
-
+      arpegSpeed=(i>>2);
 
       
 
@@ -544,12 +546,12 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
 
   monoNoteStack[monoNoteEnd++] = n;
   monoNoteStack[monoNoteEnd]=0;
+  monoNoteTimer=254;
 
   oscillators[0].notenumber=n;
   oscillators[0].velocity=vel;
   oscillators[0].channel=chan;
   oscillators[0].released=0;
-  //oscillators[0].amplitude=(float)vel;
 
 }
 void noteOffMonophonic(uint8_t n, uint8_t chan) {
@@ -837,11 +839,10 @@ void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
   struct oscillator* osc= &oscillators[0];
   struct oscillator* osc2= &oscillators[1];
 
-  static int timer=0;
-  if (++timer>15) {
+  if (arpegSpeed!=31 && ++monoNoteTimer>arpegSpeed) {
     if (++monoNoteNow>=monoNoteEnd) monoNoteNow=0;
     osc->notenumber = monoNoteStack[monoNoteNow];
-    timer=0;
+    monoNoteTimer=0;
   }
   if (++monoNoteReleaseTimer>20 && osc->released==0){
     monoNoteStack[monoNoteEnd]=0;
