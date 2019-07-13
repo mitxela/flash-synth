@@ -582,6 +582,10 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
   for (int i=0; i<monoNoteEnd; i++){
     if ((monoNoteStack[i]&0x7F) == n) {
       monoNoteStack[i] = n;
+      monoNoteNow=i;
+      oscillators[0].notenumber=n;
+      oscillators[0].velocity=vel;
+      oscillators[0].channel=chan;
       return;
     }
   }
