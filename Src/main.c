@@ -92,7 +92,7 @@ uint8_t monoNoteNow=0;
 uint8_t monoNoteTimer=0;
 uint8_t monoNoteReleaseTimer=0;
 uint8_t arpegSpeed=10;
-float portamento = 0.0;
+float portamento = 1.0;
 
 uint32_t timestamp = 0;
 uint8_t targetWave = 0;
@@ -263,7 +263,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       channels[chan].lfo_depth = (float)(i*8);
     break;
     case 5: //portamento
-      portamento = (float)(i*8);
+      portamento = (float)(128-i) /128.0;
     break;
 
     case 76:
@@ -888,6 +888,7 @@ void generateIntoBufferDualOsc(uint16_t* buf, uint16_t* buf2){
 void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
 
 //  for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048; buf2[i]=2048;}
+  static float f=0.0;
 
   struct oscillator* osc= &oscillators[0];
   struct oscillator* osc2= &oscillators[1];
@@ -901,7 +902,9 @@ void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
     memcpy(monoNoteReleaseStack, monoNoteStack, monoNoteEnd);
     monoNoteReleaseEnd=monoNoteEnd;
   }
-  float f = calculateFrequency(osc);
+  float ft = calculateFrequency(osc);
+  f += (ft-f)*portamento;
+  
   float fr = f*detuneUp;
   float fl = f*detuneDown;
 
