@@ -370,11 +370,35 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     case 64: //sustain pedal
       channels[chan].sustain = (i>63);
       if (channels[chan].sustain == 0) {//pedal released
-        //loop through oscillators and release any with sustained=true
-        for (uint8_t i=POLYPHONY; i--;) {
-          if (oscillators[i].sustained && oscillators[i].alive && !oscillators[i].released && oscillators[i].channel==chan) {
-            oscillators[i].released=1;
-            oscillators[i].sustained=0;
+        if (noteOff == &noteOffMonophonic) {
+          if (oscillators[0].released) break;
+
+          for (int i=monoNoteEnd;i--;) {
+            if (monoNoteStack[i]&0x80) {
+              for (int j=i; j<monoNoteEnd;j++) {
+                monoNoteStack[j]=monoNoteStack[j+1];
+              }
+              monoNoteEnd--;
+            }
+          }
+
+          if (monoNoteEnd) {
+            monoNoteReleaseTimer=ARPEG_RELEASE_CATCH;
+            if (monoNoteNow>=monoNoteEnd) monoNoteNow=monoNoteEnd-1;
+            oscillators[0].notenumber=monoNoteStack[monoNoteNow]&0x7f;
+          } else {
+            oscillators[0].released=1;
+            memcpy(monoNoteStack, monoNoteReleaseStack, monoNoteReleaseEnd);
+            monoNoteEnd=monoNoteReleaseEnd;
+          }
+
+        } else {
+          //loop through oscillators and release any with sustained=true
+          for (uint8_t i=POLYPHONY; i--;) {
+            if (oscillators[i].sustained && oscillators[i].alive && !oscillators[i].released && oscillators[i].channel==chan) {
+              oscillators[i].released=1;
+              oscillators[i].sustained=0;
+            }
           }
         }
       }
@@ -555,12 +579,20 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
 
   if (oscillators[0].released) monoNoteEnd=0;
 
+  for (int i=0; i<monoNoteEnd; i++){
+    if ((monoNoteStack[i]&0x7F) == n) {
+      monoNoteStack[i] = n;
+      return;
+    }
+  }
+  if (monoNoteEnd==ARPEG_SIZE) return;
+
   monoNoteNow = monoNoteEnd;
-  monoNoteStack[monoNoteEnd++] = n;
-  monoNoteStack[monoNoteEnd]=0;
+  monoNoteStack[monoNoteEnd] = n;
+  monoNoteStack[++monoNoteEnd]=0;
   monoNoteTimer=0;
 
-  oscillators[0].notenumber=monoNoteStack[monoNoteNow];
+  oscillators[0].notenumber=n;
   oscillators[0].velocity=vel;
   oscillators[0].channel=chan;
   oscillators[0].released=0;
@@ -570,6 +602,14 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
   monoNoteReleaseTimer=0;
 }
 void noteOffMonophonic(uint8_t n, uint8_t chan) {
+
+  if (channels[chan].sustain) {
+    for (int i=0; i<monoNoteEnd; i++){
+      if (monoNoteStack[i] == n) monoNoteStack[i]|=0x80;
+    }
+    return;
+  }
+
   monoNoteReleaseTimer=ARPEG_RELEASE_CATCH;
 
   for (int i=0; i<monoNoteEnd; i++){
@@ -583,13 +623,12 @@ void noteOffMonophonic(uint8_t n, uint8_t chan) {
   }
   if (monoNoteEnd) {
     if (monoNoteNow>=monoNoteEnd) monoNoteNow=monoNoteEnd-1;
-    oscillators[0].notenumber=monoNoteStack[monoNoteNow];
+    oscillators[0].notenumber=monoNoteStack[monoNoteNow]&0x7f;
   } else {
     oscillators[0].released=1;
     memcpy(monoNoteStack, monoNoteReleaseStack, monoNoteReleaseEnd);
     monoNoteEnd=monoNoteReleaseEnd;
   }
-
 }
 
 
@@ -855,7 +894,7 @@ void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
 
   if (arpegSpeed!=31 && ++monoNoteTimer>arpegSpeed) {
     if (++monoNoteNow>=monoNoteEnd) monoNoteNow=0;
-    osc->notenumber = monoNoteStack[monoNoteNow];
+    osc->notenumber = monoNoteStack[monoNoteNow]&0x7f;
     monoNoteTimer=0;
   }
   if (monoNoteReleaseTimer && osc->released==0 && --monoNoteReleaseTimer==0){
