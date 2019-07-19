@@ -189,6 +189,11 @@ void setWaveform(uint8_t id) {
   // %8192 == &8191
 
   switch (id) {
+  default: //sine
+    for (uint16_t i=0;i<8192;i++) {
+      mainLut[i]=sinLut[i];
+    }
+    break;
 
   case 1: // Hammondish
     for (uint16_t i=0;i<8192;i++) {
@@ -214,8 +219,6 @@ void setWaveform(uint8_t id) {
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]= sinLut[i] > 0 ? sinLut[i] : -sinLut[i];
     }
-//antialias(128);
-//antialias();
     break;
   case 5: // hard square
     for (uint16_t i=0;i<4096;i++) {
@@ -225,13 +228,33 @@ void setWaveform(uint8_t id) {
       mainLut[i]=-0.5;
     }
     break;
-  case 6: // fifth square
+  case 6: // soft square
+    { 
+      uint16_t i=0;
+      while (i<512) {
+        mainLut[i]= (i/512.0) -0.5;
+        i++;
+      }
+      while (i<4096) {
+        mainLut[i]=0.5;
+        i++;
+      }
+      while (i<4096+512) {
+        mainLut[i]= ((512-i+4096)/512.0) -0.5;
+        i++;
+      }
+      while (i<8192) {
+        mainLut[i]=-0.5;
+        i++;
+      }
+    }
+    break;
+  case 7: // fifth square
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]= (((i*2)&8191) >4192? 0.25:-0.25) + (((i*3)&8191) >4192? 0.25:-0.25);
     }
     break;
-
-  case 7: // saw
+  case 8: // saw
     {
       float j=0.5;
       for (uint16_t i=0;i<8192;i++) {
@@ -239,14 +262,43 @@ void setWaveform(uint8_t id) {
       }
     }
     break;
-
-
-
-
-  default: //sine
-    for (uint16_t i=0;i<8192;i++) {
-      mainLut[i]=sinLut[i];
+  case 9: // sine-even
+    for (uint16_t i=0;i<4096;i++) {
+      mainLut[i]= sinLut[i*2];
     }
+    for (uint16_t i=4096;i<8192;i++) {
+      mainLut[i]= 0.0;
+    }
+    break;
+  case 10: // abs sine-even
+    for (uint16_t i=0;i<2048;i++) {
+      mainLut[i]= sinLut[i*2];
+    }
+    for (uint16_t i=2048;i<4096;i++) {
+      mainLut[i]= sinLut[i*2-4096];
+    }
+    for (uint16_t i=4096;i<8192;i++) {
+      mainLut[i]= 0.0;
+    }
+    break;
+  case 11: // hard pulse 25%
+    for (uint16_t i=0;i<2048;i++) {
+      mainLut[i]=0.5;
+    }
+    for (uint16_t i=2048;i<8192;i++) {
+      mainLut[i]=-0.5;
+    }
+    break;
+  case 12: // hard pulse 33%
+    for (uint16_t i=0;i<2731;i++) {
+      mainLut[i]=0.5;
+    }
+    for (uint16_t i=2731;i<8192;i++) {
+      mainLut[i]=-0.5;
+    }
+    break;
+
+
   }
   antialias((aa<<3)+8);
   antialias((aa<<3)+8);

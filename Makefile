@@ -172,7 +172,7 @@ $(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 
 # Image to visualize memory usage
 $(BUILD_DIR)/%.pgm: $(BUILD_DIR)/%.bin
-	echo "P5 256 1024 255" > $@; cat $< >> $@
+	(echo "P5 256 1024 255" ; cat $< ) > $@
 
 $(BUILD_DIR):
 	mkdir $@		
