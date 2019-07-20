@@ -33,7 +33,7 @@ static void Error_Handler(void);
 
 #define DEFAULT_PB_RANGE 2
 
-#define ARPEG_SIZE 64
+#define ARPEG_SIZE 32
 #define ARPEG_RELEASE_CATCH 10
 
 uint16_t buffer[BUFFERSIZE*2] = {0};
@@ -84,9 +84,9 @@ struct oscillator {
 } oscillators[POLYPHONY];
 
 // TODO: unionize this with oscillator memory (if we get short of ram)
-uint8_t monoNoteStack[ARPEG_SIZE];
+uint8_t monoNoteStack[ARPEG_SIZE*2];
 uint8_t monoNoteEnd=0;
-uint8_t monoNoteReleaseStack[ARPEG_SIZE];
+uint8_t monoNoteReleaseStack[ARPEG_SIZE*2];
 uint8_t monoNoteReleaseEnd=0;
 uint8_t monoNoteNow=0;
 uint8_t monoNoteTimer=0;
@@ -425,18 +425,18 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
         if (noteOff == &noteOffMonophonic) {
           if (oscillators[0].released) break;
 
-          for (int i=monoNoteEnd;i--;) {
-            if (monoNoteStack[i]&0x80) {
+          for (int i=monoNoteEnd-2;i>=0;i-=2) {
+            if (monoNoteStack[i]&0x80 && monoNoteStack[i+1]==chan) {
               for (int j=i; j<monoNoteEnd;j++) {
-                monoNoteStack[j]=monoNoteStack[j+1];
+                monoNoteStack[j]=monoNoteStack[j+2];
               }
-              monoNoteEnd--;
+              monoNoteEnd-=2;
             }
           }
 
           if (monoNoteEnd) {
             monoNoteReleaseTimer=ARPEG_RELEASE_CATCH;
-            if (monoNoteNow>=monoNoteEnd) monoNoteNow=monoNoteEnd-1;
+            if (monoNoteNow>=monoNoteEnd) monoNoteNow=monoNoteEnd-2;
             oscillators[0].notenumber=monoNoteStack[monoNoteNow]&0x7f;
           } else {
             oscillators[0].released=1;
@@ -631,8 +631,8 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
 
   if (oscillators[0].released) monoNoteEnd=0;
 
-  for (int i=0; i<monoNoteEnd; i++){
-    if ((monoNoteStack[i]&0x7F) == n) {
+  for (int i=0; i<monoNoteEnd; i+=2){
+    if ((monoNoteStack[i]&0x7F) == n && monoNoteStack[i+1]==chan) {
       monoNoteStack[i] = n;
       monoNoteNow=i;
       oscillators[0].notenumber=n;
@@ -645,7 +645,9 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
 
   monoNoteNow = monoNoteEnd;
   monoNoteStack[monoNoteEnd] = n;
-  monoNoteStack[++monoNoteEnd]=0;
+  monoNoteStack[monoNoteEnd+1] = chan;
+  monoNoteEnd+=2;
+  monoNoteStack[monoNoteEnd]=0;
   monoNoteTimer=0;
 
   oscillators[0].notenumber=n;
@@ -653,14 +655,14 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
   oscillators[0].channel=chan;
   oscillators[0].released=0;
 
-  memcpy(monoNoteReleaseStack, monoNoteStack, monoNoteEnd);
+  memcpy(monoNoteReleaseStack, monoNoteStack, monoNoteEnd+1);
   monoNoteReleaseEnd=monoNoteEnd;
   monoNoteReleaseTimer=0;
 }
 void noteOffMonophonic(uint8_t n, uint8_t chan) {
 
   if (channels[chan].sustain) {
-    for (int i=0; i<monoNoteEnd; i++){
+    for (int i=0; i<monoNoteEnd; i+=2){
       if (monoNoteStack[i] == n) monoNoteStack[i]|=0x80;
     }
     return;
@@ -668,21 +670,22 @@ void noteOffMonophonic(uint8_t n, uint8_t chan) {
 
   monoNoteReleaseTimer=ARPEG_RELEASE_CATCH;
 
-  for (int i=0; i<monoNoteEnd; i++){
-    if (monoNoteStack[i] == n) {
-      while (i<monoNoteEnd) {
-        monoNoteStack[i]=monoNoteStack[i+1];
+  for (int i=0; i<monoNoteEnd; i+=2){
+    if (monoNoteStack[i] == n && monoNoteStack[i+1]==chan) {
+      while (i<monoNoteEnd+1) {
+        monoNoteStack[i]=monoNoteStack[i+2];
         i++;
       }
-      monoNoteEnd--;
+      monoNoteEnd-=2;
     }
   }
-  if (monoNoteEnd) {
-    if (monoNoteNow>=monoNoteEnd) monoNoteNow=monoNoteEnd-1;
+  if (monoNoteEnd>0) {
+    if (monoNoteNow>=monoNoteEnd) monoNoteNow=monoNoteEnd-2;
     oscillators[0].notenumber=monoNoteStack[monoNoteNow]&0x7f;
+    oscillators[0].channel=monoNoteStack[monoNoteNow+1];
   } else {
     oscillators[0].released=1;
-    memcpy(monoNoteStack, monoNoteReleaseStack, monoNoteReleaseEnd);
+    memcpy(monoNoteStack, monoNoteReleaseStack, monoNoteReleaseEnd+1);
     monoNoteEnd=monoNoteReleaseEnd;
   }
 }
@@ -950,12 +953,14 @@ void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
   struct oscillator* osc2= &oscillators[1];
 
   if (arpegSpeed!=31 && ++monoNoteTimer>arpegSpeed) {
-    if (++monoNoteNow>=monoNoteEnd) monoNoteNow=0;
+    monoNoteNow+=2;
+    if (monoNoteNow>=monoNoteEnd) monoNoteNow=0;
     osc->notenumber = monoNoteStack[monoNoteNow]&0x7f;
+    osc->channel = monoNoteStack[monoNoteNow+1];
     monoNoteTimer=0;
   }
   if (monoNoteReleaseTimer && osc->released==0 && --monoNoteReleaseTimer==0){
-    memcpy(monoNoteReleaseStack, monoNoteStack, monoNoteEnd);
+    memcpy(monoNoteReleaseStack, monoNoteStack, monoNoteEnd+1);
     monoNoteReleaseEnd=monoNoteEnd;
   }
   float ft = calculateFrequency(osc);
