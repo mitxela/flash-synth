@@ -108,6 +108,11 @@ typedef void doOscStereo_t(struct oscillator* osc, struct oscillator* osc2, uint
 doOscStereo_t oscAlgo1Stereo;
 doOscStereo_t *doOscillatorStereo = &oscAlgo1Stereo;
 
+typedef void monophonicAlgo_t(float f, uint16_t* buf, uint16_t* buf2);
+monophonicAlgo_t algoMonophonic1;
+monophonicAlgo_t algoMonophonic2;
+monophonicAlgo_t *monophonicAlgo = &algoMonophonic2;
+
 typedef void generateIntoBuffer_t(uint16_t* buf, uint16_t* buf2);
 generateIntoBuffer_t generateIntoBufferFullPoly;
 generateIntoBuffer_t generateIntoBufferDualOsc;
@@ -352,12 +357,12 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     break;
     case 22:
       {
-        float factor = fm_depth;
+        // float factor = fm_depth;
         fm_depth=(float)(i*25)/127;
-        factor = fm_depth/factor; 
-        for (uint8_t j=POLYPHONY; j--;) {
-          oscillators[j].fm_amplitude *= factor;
-        }
+        // factor = fm_depth/factor; 
+        // for (uint8_t j=POLYPHONY; j--;) {
+          // oscillators[j].fm_amplitude *= factor;
+        // }
       }
     break;
     case 23:
@@ -382,13 +387,26 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             setStereo(0);
             break;
 
+          case 3: 
+            break;
+
           case 4:
-            //doOscillatorStereo = &oscAlgo3;
+            monophonicAlgo = &algoMonophonic1;
             generateIntoBuffer = &generateIntoBufferMonophonic;
             noteOn = &noteOnMonophonic;
             noteOff = &noteOffMonophonic;
             setStereo(1);
             break;
+
+
+          case 5:
+            monophonicAlgo = &algoMonophonic2;
+            generateIntoBuffer = &generateIntoBufferMonophonic;
+            noteOn = &noteOnMonophonic;
+            noteOff = &noteOffMonophonic;
+            setStereo(1);
+            break;
+
 
           default:
             doOscillator = &oscAlgo1;
@@ -629,7 +647,10 @@ void noteOffDualOsc(uint8_t n, uint8_t chan) {
 
 void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
 
-  if (oscillators[0].released) monoNoteEnd=0;
+  if (oscillators[0].released) {
+    monoNoteEnd=0;
+    oscillators[0].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+  }
 
   for (int i=0; i<monoNoteEnd; i+=2){
     if ((monoNoteStack[i]&0x7F) == n && monoNoteStack[i+1]==chan) {
@@ -920,7 +941,62 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 
 }
 
+void algoMonophonic1(float f, uint16_t* buf, uint16_t* buf2) {
 
+  struct oscillator* osc= &oscillators[0];
+  struct oscillator* osc2= &oscillators[1];
+
+  float fr = f*detuneUp;
+  float fl = f*detuneDown;
+
+  float preAmpDiff = intEnvelope(osc);
+  float ampDiff = envelope(osc);
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+    osc->amplitude += ampDiff;
+
+    osc->fm_phase += fm_freq*fl;
+    if (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
+    osc2->fm_phase += fm_freq*fr;
+    if (osc2->fm_phase>8192.0f) osc2->fm_phase-=8192.0f;
+
+    osc->fm_amplitude += preAmpDiff;
+
+    osc->phase  += fl + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude;
+    osc2->phase += fr + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude;
+    while (osc->phase>8192.0f) osc->phase-=8192.0f;
+    while (osc->phase<0.0f) osc->phase+=8192.0f;
+    while (osc2->phase>8192.0f) osc2->phase-=8192.0f;
+    while (osc2->phase<0.0f) osc2->phase+=8192.0f;
+
+    buf[i] = 2048+mainLut[(int)(osc->phase)] * osc->amplitude;
+    buf2[i]= 2048+mainLut[(int)(osc2->phase)]* osc->amplitude;
+  }
+
+}
+void algoMonophonic2(float f, uint16_t* buf, uint16_t* buf2) {
+
+  struct oscillator* osc= &oscillators[0];
+  struct oscillator* osc2= &oscillators[1];
+
+  float fr = f*detuneUp;
+  float fl = f*detuneDown;
+
+  float ampDiff = envelope(osc);
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+    osc->phase += fl ;
+    if (osc->phase>8192.0f) osc->phase-=8192.0f;
+    osc2->phase += fr ;
+    if (osc2->phase>8192.0f) osc2->phase-=8192.0f;
+
+    osc->amplitude += ampDiff;
+
+    buf[i]  = 2048+mainLut[(int)(osc->phase)] * osc->amplitude;
+    buf2[i] = 2048+mainLut[(int)(osc2->phase)] * osc->amplitude;
+  }
+
+}
 
 
 void generateIntoBufferFullPoly(uint16_t* buf, uint16_t* buf2){
@@ -945,11 +1021,11 @@ void generateIntoBufferDualOsc(uint16_t* buf, uint16_t* buf2){
 
 void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
 
-//  for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048; buf2[i]=2048;}
   static float f=0.0;
-
   struct oscillator* osc= &oscillators[0];
-  struct oscillator* osc2= &oscillators[1];
+
+  float ft = calculateFrequency(osc);
+  f += (ft-f)*portamento;
 
   if (arpegSpeed!=31 && ++monoNoteTimer>arpegSpeed) {
     monoNoteNow+=2;
@@ -962,60 +1038,31 @@ void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
     memcpy(monoNoteReleaseStack, monoNoteStack, monoNoteEnd+1);
     monoNoteReleaseEnd=monoNoteEnd;
   }
-  float ft = calculateFrequency(osc);
-  f += (ft-f)*portamento;
-  
-  float fr = f*detuneUp;
-  float fl = f*detuneDown;
 
-  float ampDiff = envelope(osc);
-
-  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
-    osc->phase += fl ;
-    if (osc->phase>8192.0f) osc->phase-=8192.0f;
-    osc2->phase += fr ;
-    if (osc2->phase>8192.0f) osc2->phase-=8192.0f;
-
-    osc->amplitude += ampDiff;
-
-    buf[i]  = 2048+mainLut[(int)(osc->phase)] * osc->amplitude;
-    buf2[i] = 2048+mainLut[(int)(osc2->phase)] * osc->amplitude;
-  }
+  monophonicAlgo(f, buf, buf2);
 
 }
 
 
 void DMA1_Channel3_IRQHandler(void)
 {
-
-
   DMA_HandleTypeDef *hdma = DacHandle.DMA_Handle1;
   uint32_t flag_it = hdma->DmaBaseAddress->ISR;
   uint32_t source_it = hdma->Instance->CCR;
 
-
-
   // Half Transfer Complete Interrupt
   if ((RESET != (flag_it & (DMA_FLAG_HT1 << hdma->ChannelIndex))) && (RESET != (source_it & DMA_IT_HT))) {
     hdma->DmaBaseAddress->IFCR = (DMA_ISR_HTIF1 << hdma->ChannelIndex);  //Clear Flag
-
     generateIntoBuffer(&buffer[0], &buffer2[0]);
-
   }
 
   // Transfer Complete Interrupt
   else if ((RESET != (flag_it & (DMA_FLAG_TC1 << hdma->ChannelIndex))) && (RESET != (source_it & DMA_IT_TC))) {
-
     hdma->DmaBaseAddress->IFCR = (DMA_ISR_TCIF1 << hdma->ChannelIndex);  //Clear Flag
-
     generateIntoBuffer(&buffer[BUFFERSIZE], &buffer2[BUFFERSIZE]);
-
-
   }
 
-
   return;
-
 }
 
 
