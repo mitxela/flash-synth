@@ -710,10 +710,9 @@ void USART1_IRQHandler(void) {
 
   } else {
     uint8_t chan = status&0x0F;
-    status &= 0xF0;
 
     if (bytenumber == 1) { // Check two-byte messages
-      switch (status) {
+      switch (status&0xF0) {
 
         case 0xD0: //After-touch
           if (i>=channels[chan].mod)
@@ -730,7 +729,7 @@ void USART1_IRQHandler(void) {
       }
     } else if (bytenumber == 2){
 
-      switch (status) {
+      switch (status&0xF0) {
 
         case 0x90: //Note on
           if (i == 0) noteOff(bytetwo, chan); //running status uses velocity=0 for noteoff
