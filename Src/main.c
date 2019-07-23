@@ -48,8 +48,9 @@ uint16_t buffer2[BUFFERSIZE*2] = {0};
 
 float releaseRate = -0.0025;
 float attackRate = 0.25;
-float decayRate = 0.25;
-float sustainLevel = 0.5;
+// float decayRate = 0.25;
+// float sustainLevel = 0.5;
+float fm_attack = 2.0;
 
 uint8_t aa = 16;
 
@@ -76,11 +77,13 @@ struct oscillator {
   float amplitude;
   float fm_phase;
   float fm_amplitude;
+  float fm_depth_cache;
   float lfo_phase;
   uint32_t starttime;
   unsigned alive:1;
   unsigned released:1;
   unsigned sustained:1;
+  unsigned intAttack:1;
 } oscillators[POLYPHONY];
 
 // TODO: unionize this with oscillator memory (if we get short of ram)
@@ -106,6 +109,7 @@ doOsc_t *doOscillator = &oscAlgo1;
 
 typedef void doOscStereo_t(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2);
 doOscStereo_t oscAlgo1Stereo;
+doOscStereo_t oscAlgo2Stereo;
 doOscStereo_t *doOscillatorStereo = &oscAlgo1Stereo;
 
 typedef void monophonicAlgo_t(float f, uint16_t* buf, uint16_t* buf2);
@@ -131,6 +135,23 @@ noteOff_t noteOffDualOsc;
 noteOff_t noteOffMonophonic;
 noteOff_t *noteOff = &noteOffDualOsc;
 
+// For ease of re-ordering:
+enum {
+  wave_Sine = 0,
+  wave_Hammondish,
+  wave_SineCubed,
+  wave_HalfSine,
+  wave_AbsSine,
+  wave_HardSquare,
+  wave_SoftSquare,
+  wave_FifthSquare,
+  wave_HardSaw,
+  wave_SoftSaw,
+  wave_SineEven,
+  wave_AbsSineEven,
+  wave_HardPulse25,
+  wave_HardPulse33
+};
 
 void setStereo(int stereo){
 
@@ -194,25 +215,26 @@ void setWaveform(uint8_t id) {
   // %8192 == &8191
 
   switch (id) {
-  default: //sine
+  default:
+  case wave_Sine:
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]=sinLut[i];
     }
     break;
 
-  case 1: // Hammondish
+  case wave_Hammondish:
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]=sinLut[(i)&8191]*0.25 + sinLut[(i*2)&8191]*0.25 + sinLut[(i*3) &8191]*0.25 + sinLut[(i*4) &8191]*0.25;
     }
     break;
 
-  case 2: // sine cubed
+  case wave_SineCubed:
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]=sinLut[i]*sinLut[i]*sinLut[i];
     }
     break;
 
-  case 3: // half sine
+  case wave_HalfSine:
     for (uint16_t i=0;i<4096;i++) {
       mainLut[i]=sinLut[i];
     }
@@ -220,12 +242,12 @@ void setWaveform(uint8_t id) {
       mainLut[i]=0;
     }
     break;
-  case 4: // abs sine
+  case wave_AbsSine:
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]= sinLut[i] > 0 ? sinLut[i] : -sinLut[i];
     }
     break;
-  case 5: // hard square
+  case wave_HardSquare:
     for (uint16_t i=0;i<4096;i++) {
       mainLut[i]=0.5;
     }
@@ -233,7 +255,7 @@ void setWaveform(uint8_t id) {
       mainLut[i]=-0.5;
     }
     break;
-  case 6: // soft square
+  case wave_SoftSquare:
     { 
       uint16_t i=0;
       while (i<512) {
@@ -254,20 +276,32 @@ void setWaveform(uint8_t id) {
       }
     }
     break;
-  case 7: // fifth square
+  case wave_FifthSquare:
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]= (((i*2)&8191) >4192? 0.25:-0.25) + (((i*3)&8191) >4192? 0.25:-0.25);
     }
     break;
-  case 8: // saw
+  case wave_HardSaw:
     {
-      float j=0.5;
+      float j=-0.5;
       for (uint16_t i=0;i<8192;i++) {
         mainLut[i]= j+=1.0/8192.0;
       }
     }
     break;
-  case 9: // sine-even
+  case wave_SoftSaw:
+    {
+      float j=0.5;
+      for (uint16_t i=0;i<512;i++) {
+        mainLut[i]= j-=1.0/512.0;
+      }
+
+      for (uint16_t i=512;i<8192;i++) {
+        mainLut[i]= j+=1.0/8192.0;
+      }
+    }
+    break;
+  case wave_SineEven: // sine-even
     for (uint16_t i=0;i<4096;i++) {
       mainLut[i]= sinLut[i*2];
     }
@@ -275,7 +309,7 @@ void setWaveform(uint8_t id) {
       mainLut[i]= 0.0;
     }
     break;
-  case 10: // abs sine-even
+  case wave_AbsSineEven: // abs sine-even
     for (uint16_t i=0;i<2048;i++) {
       mainLut[i]= sinLut[i*2];
     }
@@ -286,7 +320,7 @@ void setWaveform(uint8_t id) {
       mainLut[i]= 0.0;
     }
     break;
-  case 11: // hard pulse 25%
+  case wave_HardPulse25: // hard pulse 25%
     for (uint16_t i=0;i<2048;i++) {
       mainLut[i]=0.5;
     }
@@ -294,7 +328,7 @@ void setWaveform(uint8_t id) {
       mainLut[i]=-0.5;
     }
     break;
-  case 12: // hard pulse 33%
+  case wave_HardPulse33: // hard pulse 33%
     for (uint16_t i=0;i<2731;i++) {
       mainLut[i]=0.5;
     }
@@ -330,12 +364,12 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     case 73: //Attack time
       attackRate = (0.128/(float)(i+1));
     break;
-    case 75: //Decay time
-      decayRate = -(float)((i+1)*0.001);
-    break;
-    case 74: //Sustain time
-      sustainLevel = (float)((i+1)*0.001);
-    break;
+     case 75: //Decay time
+      fm_attack = (1.0/(float)(i+1));
+     break;
+    // case 74: //Sustain time
+      // sustainLevel = (float)((i+1)*0.001);
+    // break;
     case 72: //Release time
       releaseRate = -(0.128/(float)(i+1));
     break;
@@ -387,7 +421,12 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             setStereo(0);
             break;
 
-          case 3: 
+          case 3:
+            doOscillatorStereo = &oscAlgo2Stereo;
+            generateIntoBuffer = &generateIntoBufferDualOsc;
+            noteOn = &noteOnDualOsc;
+            noteOff = &noteOffDualOsc;
+            setStereo(1);
             break;
 
           case 4:
@@ -522,6 +561,14 @@ void loadPatch(uint8_t p){
     parameterChange(0, paramMap[i], bPatches[p][i]);
 }
 
+inline void trigger_int_envelope(struct oscillator* osc, uint8_t vel, uint8_t n){
+
+  osc->intAttack=1;
+  osc->fm_amplitude=0;
+  osc->fm_depth_cache = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
@@ -551,7 +598,10 @@ void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
     oscillators[i].notenumber=n;
     oscillators[i].channel=chan;
 
-    oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+    // oscillators[i].intAttack=1;
+    // oscillators[i].fm_amplitude=0;
+    // oscillators[i].fm_depth_cache = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+    trigger_int_envelope(&oscillators[i], vel, n);
   }
 
   oscillators[i].alive = 1;
@@ -610,7 +660,11 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
 
 oscillators[i].stolen=0;
 
-    oscillators[i].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+    // oscillators[i].intAttack=1;
+    // oscillators[i].fm_amplitude=0;
+    // oscillators[i].fm_depth_cache = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+    trigger_int_envelope(&oscillators[i], vel, n);
+
   }
 
   oscillators[i].alive = 1;
@@ -649,7 +703,8 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
 
   if (oscillators[0].released) {
     monoNoteEnd=0;
-    oscillators[0].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+    //oscillators[0].fm_amplitude = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+    trigger_int_envelope(&oscillators[0], vel, n);
   }
 
   for (int i=0; i<monoNoteEnd; i+=2){
@@ -802,7 +857,14 @@ inline float calculateFrequency(struct oscillator* osc){
 }
 
 inline float intEnvelope(struct oscillator* osc){
-  float d = - osc->fm_amplitude*(1-fm_decay);
+  float d;
+  if (osc->intAttack) {
+    d = fm_attack;
+    if (osc->fm_amplitude +fm_attack*BUFFERSIZE>=osc->fm_depth_cache) osc->intAttack=0;
+  } else {
+    d = - osc->fm_amplitude*(1-fm_decay);
+  }
+
   return d;
 }
 
@@ -858,7 +920,8 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
     osc->channel = osc->stolenChannel;
     osc->notenumber = osc->stolen;
     osc->stolen = 0;
-    osc->fm_amplitude = (osc->velocity/127.0)*fm_depth * fEqualLookup[ osc->notenumber ];
+    //osc->fm_amplitude = (osc->velocity/127.0)*fm_depth * fEqualLookup[ osc->notenumber ];
+    trigger_int_envelope(osc, osc->velocity, osc->notenumber);
   }
 }
 
@@ -866,8 +929,9 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
   float f = calculateFrequency(osc);
 
-  float f2 = 8192.0/f;
+  float f2 = 8192.0/2.0/f;
 
+  float preAmpDiff = intEnvelope(osc);
   float ampDiff = envelope(osc);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
@@ -878,9 +942,9 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
     osc->phase += f ;
     if (osc->phase>8192.0f) osc->phase-=8192.0f;
 
-    //osc->fm_amplitude *= fm_decay;
+    osc->fm_amplitude += preAmpDiff;
 
-    osc->fm_phase = mainLut[(int)(osc->phase)] * osc->amplitude *f2;
+    osc->fm_phase = mainLut[(int)(osc->phase)] * osc->fm_amplitude *f2;
     while (osc->fm_phase<0.0f) osc->fm_phase+=8192.0f;
     while (osc->fm_phase>=8192.0f) osc->fm_phase-=8192.0f;
 
@@ -893,6 +957,7 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
     osc->notenumber = osc->stolen;
     osc->stolen = 0;
     //osc->fm_amplitude = (osc->velocity/127.0)*fm_depth * fEqualLookup[ osc->notenumber ];
+    trigger_int_envelope(osc, osc->velocity, osc->notenumber);
   }
 }
 
@@ -940,6 +1005,52 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
   }
 
 }
+
+
+void oscAlgo2Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2){
+
+  float f = calculateFrequency(osc);
+  float f2 = 8192.0/2.0/f;
+
+  float fr = f*detuneUp;
+  float fl = f*detuneDown;
+
+  float preAmpDiff = intEnvelope(osc);
+  float ampDiff = envelope(osc);
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+
+    osc->amplitude += ampDiff;
+
+
+    osc->phase += fl ;
+    if (osc->phase>8192.0f) osc->phase-=8192.0f;
+    osc2->phase += fr ;
+    if (osc2->phase>8192.0f) osc2->phase-=8192.0f;
+
+    osc->fm_amplitude += preAmpDiff;
+
+    osc->fm_phase  = mainLut[(int)( osc->phase)] * osc->fm_amplitude *f2;
+    osc2->fm_phase = mainLut[(int)(osc2->phase)] * osc->fm_amplitude *f2;
+    while ( osc->fm_phase<0.0f) osc->fm_phase+=8192.0f;
+    while ( osc->fm_phase>=8192.0f) osc->fm_phase-=8192.0f;
+    while (osc2->fm_phase<0.0f) osc2->fm_phase+=8192.0f;
+    while (osc2->fm_phase>=8192.0f) osc2->fm_phase-=8192.0f;
+
+    buf[i] += sinLut[(int)( osc->fm_phase)] * osc->amplitude;
+    buf2[i]+= sinLut[(int)(osc2->fm_phase)] * osc->amplitude;
+
+  }
+
+  if (osc->stolen) {
+    osc->channel = osc->stolenChannel;
+    osc->notenumber = osc->stolen;
+    osc->stolen = 0;
+
+    trigger_int_envelope(osc, osc->velocity, osc->notenumber);
+  }
+}
+
 
 void algoMonophonic1(float f, uint16_t* buf, uint16_t* buf2) {
 
