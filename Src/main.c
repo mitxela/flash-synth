@@ -365,7 +365,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       attackRate = (0.128/(float)(i+1));
     break;
      case 75: //Decay time
-      fm_attack = (1.0/(float)(i+1));
+      fm_attack = (1.0/((float)i+0.5));
      break;
     // case 74: //Sustain time
       // sustainLevel = (float)((i+1)*0.001);
@@ -856,18 +856,6 @@ inline float calculateFrequency(struct oscillator* osc){
   return f;
 }
 
-inline float intEnvelope(struct oscillator* osc){
-  float d;
-  if (osc->intAttack) {
-    d = fm_attack;
-    if (osc->fm_amplitude +fm_attack*BUFFERSIZE>=osc->fm_depth_cache) osc->intAttack=0;
-  } else {
-    d = - osc->fm_amplitude*(1-fm_decay);
-  }
-
-  return d;
-}
-
 // Generate a cachable envelope delta. Warp the edges so that state transitions always happen at the buffer boundaries
 inline float envelope(struct oscillator* osc){
   float d = 0.0;
@@ -891,6 +879,31 @@ inline float envelope(struct oscillator* osc){
 
   return d;
 }
+
+inline float intEnvelope(struct oscillator* osc){
+  float d;
+  if (osc->intAttack) {
+    d = fm_attack;
+    if (osc->fm_amplitude +fm_attack*BUFFERSIZE>=osc->fm_depth_cache) osc->intAttack=0;
+  } else {
+    d = - osc->fm_amplitude*(1-fm_decay);
+  }
+
+  return d;
+}
+
+inline void graceful_theft(struct oscillator* osc){
+  if (osc->stolen) {
+    osc->amplitude=0.0;
+
+    osc->channel = osc->stolenChannel;
+    osc->notenumber = osc->stolen;
+    osc->stolen = 0;
+
+    trigger_int_envelope(osc, osc->velocity, osc->notenumber);
+  }
+}
+
 
 void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
@@ -916,13 +929,7 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
   }
 
-  if (osc->stolen) {
-    osc->channel = osc->stolenChannel;
-    osc->notenumber = osc->stolen;
-    osc->stolen = 0;
-    //osc->fm_amplitude = (osc->velocity/127.0)*fm_depth * fEqualLookup[ osc->notenumber ];
-    trigger_int_envelope(osc, osc->velocity, osc->notenumber);
-  }
+  graceful_theft(osc);
 }
 
 void oscAlgo2(struct oscillator* osc, uint16_t* buf){
@@ -952,13 +959,7 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
   }
 
-  if (osc->stolen) {
-    osc->channel = osc->stolenChannel;
-    osc->notenumber = osc->stolen;
-    osc->stolen = 0;
-    //osc->fm_amplitude = (osc->velocity/127.0)*fm_depth * fEqualLookup[ osc->notenumber ];
-    trigger_int_envelope(osc, osc->velocity, osc->notenumber);
-  }
+  graceful_theft(osc);
 }
 
 
@@ -995,15 +996,7 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 
   }
 
-  if (osc->stolen) {
-//if (osc->amplitude<0) 
-//osc->amplitude=0;
-    osc->channel = osc->stolenChannel;
-    osc->notenumber = osc->stolen;
-    osc->stolen = 0;
-    osc->fm_amplitude = (osc->velocity/127.0)*fm_depth * fEqualLookup[ osc->notenumber ];
-  }
-
+  graceful_theft(osc);
 }
 
 
@@ -1042,13 +1035,7 @@ void oscAlgo2Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 
   }
 
-  if (osc->stolen) {
-    osc->channel = osc->stolenChannel;
-    osc->notenumber = osc->stolen;
-    osc->stolen = 0;
-
-    trigger_int_envelope(osc, osc->velocity, osc->notenumber);
-  }
+  graceful_theft(osc);
 }
 
 
