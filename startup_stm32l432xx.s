@@ -151,10 +151,14 @@ g_pfnVectors:
 	.word	MemManage_Handler
 	.word	BusFault_Handler
 	.word	UsageFault_Handler
+
+/* Reserved area 0x001C - 0x002B*/
 	.word	0
 	.word	0
 	.word	0
 	.word	0
+
+/* 0x002C */
 	.word	SVC_Handler
 	.word	DebugMon_Handler
 	.word	0
