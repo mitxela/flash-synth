@@ -400,7 +400,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       }
     break;
     case 23:
-      fm_decay=0.9995 + ((float)(i)/254000);
+      fm_decay=1.0 - ((float)(i*i)/25400000);
     break;
     case 24:
       {
@@ -884,7 +884,10 @@ inline float intEnvelope(struct oscillator* osc){
   float d;
   if (osc->intAttack) {
     d = fm_attack;
-    if (osc->fm_amplitude +fm_attack*BUFFERSIZE>=osc->fm_depth_cache) osc->intAttack=0;
+    if (osc->fm_amplitude +fm_attack*BUFFERSIZE>=osc->fm_depth_cache) {
+      d = (osc->fm_depth_cache - osc->fm_amplitude) / BUFFERSIZE;
+      osc->intAttack=0;
+    }
   } else {
     d = - osc->fm_amplitude*(1-fm_decay);
   }
