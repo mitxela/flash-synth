@@ -153,6 +153,14 @@ enum {
   wave_HardPulse33
 };
 
+#define phase_incr(x, y) \
+  x += y; \
+  if (x >8192.0f) x-=8192.0f;
+
+#define phase_wrap(x) \
+  while ( x<0.0f ) x+=8192.0f; \
+  while ( x>=8192.0f ) x-=8192.0f;
+
 void setStereo(int stereo){
 
   // static bool previousState=0;
@@ -180,8 +188,6 @@ void setStereo(int stereo){
     Error_Handler();
 
 }
-
-
 
 void antialias(unsigned int radius){
 // Must be symmetric
@@ -915,15 +921,12 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
     osc->amplitude += ampDiff;
 
-    osc->fm_phase += fm_freq*f;
-    if (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
-
+    phase_incr(osc->fm_phase, fm_freq*f)
 
     osc->fm_amplitude += preAmpDiff;
 
     osc->phase += f  + sinLut[(int)(osc->fm_phase)]*osc->fm_amplitude *f;
-    while (osc->phase>8192.0f) osc->phase-=8192.0f;
-    while (osc->phase<0.0f) osc->phase+=8192.0f;
+    phase_wrap(osc->phase)
 
     buf[i] += mainLut[(int)(osc->phase)] * osc->amplitude;
 
@@ -945,15 +948,12 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
     osc->amplitude += ampDiff;
 
-
-    osc->phase += f ;
-    if (osc->phase>8192.0f) osc->phase-=8192.0f;
+    phase_incr(osc->phase, f)
 
     osc->fm_amplitude += preAmpDiff;
 
     osc->fm_phase = mainLut[(int)(osc->phase)] * osc->fm_amplitude *f2;
-    while (osc->fm_phase<0.0f) osc->fm_phase+=8192.0f;
-    while (osc->fm_phase>=8192.0f) osc->fm_phase-=8192.0f;
+    phase_wrap(osc->fm_phase)
 
     buf[i] += sinLut[(int)(osc->fm_phase)] * osc->amplitude;
 
@@ -977,19 +977,15 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 
     osc->amplitude += ampDiff;
 
-    osc->fm_phase += fm_freq*fl;
-    if (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
-    osc2->fm_phase += fm_freq*fr;
-    if (osc2->fm_phase>8192.0f) osc2->fm_phase-=8192.0f;
+    phase_incr(osc->fm_phase, fm_freq*fl)
+    phase_incr(osc2->fm_phase,fm_freq*fr)
 
     osc->fm_amplitude += preAmpDiff;
 
     osc->phase  += fl + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude *fl;
     osc2->phase += fr + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude *fr;
-    while (osc->phase>8192.0f) osc->phase-=8192.0f;
-    while (osc->phase<0.0f) osc->phase+=8192.0f;
-    while (osc2->phase>8192.0f) osc2->phase-=8192.0f;
-    while (osc2->phase<0.0f) osc2->phase+=8192.0f;
+    phase_wrap(osc->phase)
+    phase_wrap(osc2->phase)
 
     buf[i] += mainLut[(int)(osc->phase)] * osc->amplitude;
     buf2[i]+= mainLut[(int)(osc2->phase)]* osc->amplitude;
@@ -1003,7 +999,6 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 void oscAlgo2Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2){
 
   float f = calculateFrequency(osc);
-  float f2 = 8192.0/2.0;
 
   float fr = f*detuneUp;
   float fl = f*detuneDown;
@@ -1015,19 +1010,16 @@ void oscAlgo2Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 
     osc->amplitude += ampDiff;
 
-    osc->phase += fl ;
-    if (osc->phase>8192.0f) osc->phase-=8192.0f;
-    osc2->phase += fr ;
-    if (osc2->phase>8192.0f) osc2->phase-=8192.0f;
+    phase_incr(osc->phase, fl)
+    phase_incr(osc2->phase, fr)
 
     osc->fm_amplitude += preAmpDiff;
 
-    osc->fm_phase  = mainLut[(int)( osc->phase)] * osc->fm_amplitude *f2;
-    osc2->fm_phase = mainLut[(int)(osc2->phase)] * osc->fm_amplitude *f2;
-    while ( osc->fm_phase<0.0f) osc->fm_phase+=8192.0f;
-    while ( osc->fm_phase>=8192.0f) osc->fm_phase-=8192.0f;
-    while (osc2->fm_phase<0.0f) osc2->fm_phase+=8192.0f;
-    while (osc2->fm_phase>=8192.0f) osc2->fm_phase-=8192.0f;
+    osc->fm_phase  = mainLut[(int)( osc->phase)] * osc->fm_amplitude *4096.0;
+    osc2->fm_phase = mainLut[(int)(osc2->phase)] * osc->fm_amplitude *4096.0;
+
+    phase_wrap(osc->fm_phase)
+    phase_wrap(osc2->fm_phase)
 
     buf[i] += sinLut[(int)( osc->fm_phase)] * osc->amplitude;
     buf2[i]+= sinLut[(int)(osc2->fm_phase)] * osc->amplitude;
@@ -1052,19 +1044,15 @@ void algoMonophonic1(float f, uint16_t* buf, uint16_t* buf2) {
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
     osc->amplitude += ampDiff;
 
-    osc->fm_phase += fm_freq*fl;
-    if (osc->fm_phase>8192.0f) osc->fm_phase-=8192.0f;
-    osc2->fm_phase += fm_freq*fr;
-    if (osc2->fm_phase>8192.0f) osc2->fm_phase-=8192.0f;
+    phase_incr(osc->fm_phase, fm_freq*fl)
+    phase_incr(osc2->fm_phase,fm_freq*fr)
 
     osc->fm_amplitude += preAmpDiff;
 
     osc->phase  += fl + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude *fl;
     osc2->phase += fr + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude *fr;
-    while (osc->phase>8192.0f) osc->phase-=8192.0f;
-    while (osc->phase<0.0f) osc->phase+=8192.0f;
-    while (osc2->phase>8192.0f) osc2->phase-=8192.0f;
-    while (osc2->phase<0.0f) osc2->phase+=8192.0f;
+    phase_wrap(osc->phase)
+    phase_wrap(osc2->phase)
 
     buf[i] = 2048+mainLut[(int)(osc->phase)] * osc->amplitude;
     buf2[i]= 2048+mainLut[(int)(osc2->phase)]* osc->amplitude;
@@ -1076,7 +1064,6 @@ void algoMonophonic2(float f, uint16_t* buf, uint16_t* buf2) {
   struct oscillator* osc= &oscillators[0];
   struct oscillator* osc2= &oscillators[1];
 
-  float f2 = 8192.0/2.0;
   float fr = f*detuneUp;
   float fl = f*detuneDown;
 
@@ -1086,19 +1073,16 @@ void algoMonophonic2(float f, uint16_t* buf, uint16_t* buf2) {
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
     osc->amplitude += ampDiff;
 
-    osc->phase += fl ;
-    if (osc->phase>8192.0f) osc->phase-=8192.0f;
-    osc2->phase += fr ;
-    if (osc2->phase>8192.0f) osc2->phase-=8192.0f;
+    phase_incr(osc->phase, fl)
+    phase_incr(osc2->phase, fr)
 
     osc->fm_amplitude += preAmpDiff;
 
-    osc->fm_phase  = mainLut[(int)( osc->phase)] * osc->fm_amplitude *f2;
-    osc2->fm_phase = mainLut[(int)(osc2->phase)] * osc->fm_amplitude *f2;
-    while ( osc->fm_phase<0.0f) osc->fm_phase+=8192.0f;
-    while ( osc->fm_phase>=8192.0f) osc->fm_phase-=8192.0f;
-    while (osc2->fm_phase<0.0f) osc2->fm_phase+=8192.0f;
-    while (osc2->fm_phase>=8192.0f) osc2->fm_phase-=8192.0f;
+    osc->fm_phase  = mainLut[(int)( osc->phase)] * osc->fm_amplitude *4096.0;
+    osc2->fm_phase = mainLut[(int)(osc2->phase)] * osc->fm_amplitude *4096.0;
+
+    phase_wrap(osc->fm_phase)
+    phase_wrap(osc2->fm_phase)
 
     buf[i]  = 2048+sinLut[(int)( osc->fm_phase)] * osc->amplitude;
     buf2[i] = 2048+sinLut[(int)(osc2->fm_phase)] * osc->amplitude;
@@ -1210,26 +1194,17 @@ int main(void) {
   if (HAL_DAC_Start_DMA(&DacHandle, DAC_CHANNEL_2, (uint32_t *)buffer, BUFFERSIZE*2, DAC_ALIGN_12B_R) != HAL_OK)
     Error_Handler();
   
-/*
-fm_freq=1.0;
-fm_depth=(float)(64*25)/127;
-fm_decay = 0.9995 + ((float)(121)/254000);
-lfo_freq = (0.1+(float)(48 )/512)* 2048;
 
-setWaveform(0);
-*/
   for (uint8_t i=16;i--;) {
     channels[i].pbSensitivity = DEFAULT_PB_RANGE;
     channels[i].tuning = &fEqualLookup[0];
-  };
+  }
   
   loadPatch(0);
 
   while (1) {
-
     setWaveform(targetWave);
-
-  };
+  }
 }
 
 void SystemClock_Config(void)
