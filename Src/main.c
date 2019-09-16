@@ -365,7 +365,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       attackRate = (0.128/(float)(i+1));
     break;
      case 75: //Decay time
-      fm_attack = (1.0/((float)i+0.5));
+      fm_attack = (0.01/((float)i+0.5));
      break;
     // case 74: //Sustain time
       // sustainLevel = (float)((i+1)*0.001);
@@ -565,7 +565,7 @@ inline void trigger_int_envelope(struct oscillator* osc, uint8_t vel, uint8_t n)
 
   osc->intAttack=1;
   osc->fm_amplitude=0;
-  osc->fm_depth_cache = (vel/127.0)*fm_depth * fEqualLookup[ n ];
+  osc->fm_depth_cache = (vel/127.0)*fm_depth;// * fEqualLookup[ n ];
 
 }
 
@@ -598,9 +598,6 @@ void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
     oscillators[i].notenumber=n;
     oscillators[i].channel=chan;
 
-    // oscillators[i].intAttack=1;
-    // oscillators[i].fm_amplitude=0;
-    // oscillators[i].fm_depth_cache = (vel/127.0)*fm_depth * fEqualLookup[ n ];
     trigger_int_envelope(&oscillators[i], vel, n);
   }
 
@@ -658,11 +655,8 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
     oscillators[i].notenumber=n;
     oscillators[i].channel=chan;
 
-oscillators[i].stolen=0;
+    oscillators[i].stolen=0;
 
-    // oscillators[i].intAttack=1;
-    // oscillators[i].fm_amplitude=0;
-    // oscillators[i].fm_depth_cache = (vel/127.0)*fm_depth * fEqualLookup[ n ];
     trigger_int_envelope(&oscillators[i], vel, n);
 
   }
@@ -924,7 +918,7 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
     osc->fm_amplitude += preAmpDiff;
 
-    osc->phase += f  + sinLut[(int)(osc->fm_phase)]*osc->fm_amplitude;
+    osc->phase += f  + sinLut[(int)(osc->fm_phase)]*osc->fm_amplitude *f;
     while (osc->phase>8192.0f) osc->phase-=8192.0f;
     while (osc->phase<0.0f) osc->phase+=8192.0f;
 
@@ -939,7 +933,7 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
   float f = calculateFrequency(osc);
 
-  float f2 = 8192.0/2.0/f;
+  float f2 = 8192.0/2.0;
 
   float preAmpDiff = intEnvelope(osc);
   float ampDiff = envelope(osc);
@@ -987,8 +981,8 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 
     osc->fm_amplitude += preAmpDiff;
 
-    osc->phase  += fl + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude;
-    osc2->phase += fr + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude;
+    osc->phase  += fl + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude *fl;
+    osc2->phase += fr + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude *fr;
     while (osc->phase>8192.0f) osc->phase-=8192.0f;
     while (osc->phase<0.0f) osc->phase+=8192.0f;
     while (osc2->phase>8192.0f) osc2->phase-=8192.0f;
@@ -1006,7 +1000,7 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 void oscAlgo2Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2){
 
   float f = calculateFrequency(osc);
-  float f2 = 8192.0/2.0/f;
+  float f2 = 8192.0/2.0;
 
   float fr = f*detuneUp;
   float fl = f*detuneDown;
