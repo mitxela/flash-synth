@@ -96,8 +96,8 @@ AS_DEFS =
 # C defines
 C_DEFS =  \
 -DUSE_HAL_DRIVER \
--DSTM32L432xx
-
+-DSTM32L432xx \
+-DRESET_ON_FAULTx
 
 # AS includes
 AS_INCLUDES = 

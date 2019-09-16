@@ -1322,6 +1322,10 @@ void TIM6_Config(void)
 
 static void Error_Handler(void)
 {
-  while(1){} 
+  #ifdef RESET_ON_FAULT
+    NVIC_SystemReset();
+  #else
+    while(1){}
+  #endif
 }
 

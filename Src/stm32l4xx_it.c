@@ -55,6 +55,12 @@ extern DAC_HandleTypeDef    DacHandle;
 /* Private function prototypes -----------------------------------------------*/
 /* Private functions ---------------------------------------------------------*/
 
+#ifdef RESET_ON_FAULT
+  #define Error_reset() NVIC_SystemReset();
+#else
+  #define Error_reset() while(1){}
+#endif
+
 /******************************************************************************/
 /*            Cortex-M4 Processor Exceptions Handlers                         */
 /******************************************************************************/
@@ -75,10 +81,7 @@ void NMI_Handler(void)
   */
 void HardFault_Handler(void)
 {
-  /* Go to infinite loop when Hard Fault exception occurs */
-  while (1)
-  {
-  }
+  Error_reset()
 }
 
 /**
@@ -88,10 +91,7 @@ void HardFault_Handler(void)
   */
 void MemManage_Handler(void)
 {
-  /* Go to infinite loop when Memory Manage exception occurs */
-  while (1)
-  {
-  }
+  Error_reset()
 }
 
 /**
@@ -101,10 +101,7 @@ void MemManage_Handler(void)
   */
 void BusFault_Handler(void)
 {
-  /* Go to infinite loop when Bus Fault exception occurs */
-  while (1)
-  {
-  }
+  Error_reset()
 }
 
 /**
@@ -114,10 +111,7 @@ void BusFault_Handler(void)
   */
 void UsageFault_Handler(void)
 {
-  /* Go to infinite loop when Usage Fault exception occurs */
-  while (1)
-  {
-  }
+  Error_reset()
 }
 
 /**
