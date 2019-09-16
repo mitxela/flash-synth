@@ -803,7 +803,10 @@ void USART1_IRQHandler(void) {
 
         case 0x90: //Note on
           if (i == 0) noteOff(bytetwo, chan); //running status uses velocity=0 for noteoff
-          else noteOn(bytetwo, i, chan);
+          else {
+            if (bytetwo >= channels[chan].pbSensitivity && bytetwo <= 127-channels[chan].pbSensitivity)
+              noteOn(bytetwo, i, chan);
+          }
         break;
 
         case 0x80: //Note off
