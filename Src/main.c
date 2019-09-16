@@ -1015,7 +1015,6 @@ void oscAlgo2Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 
     osc->amplitude += ampDiff;
 
-
     osc->phase += fl ;
     if (osc->phase>8192.0f) osc->phase-=8192.0f;
     osc2->phase += fr ;
@@ -1060,8 +1059,8 @@ void algoMonophonic1(float f, uint16_t* buf, uint16_t* buf2) {
 
     osc->fm_amplitude += preAmpDiff;
 
-    osc->phase  += fl + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude;
-    osc2->phase += fr + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude;
+    osc->phase  += fl + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude *fl;
+    osc2->phase += fr + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude *fr;
     while (osc->phase>8192.0f) osc->phase-=8192.0f;
     while (osc->phase<0.0f) osc->phase+=8192.0f;
     while (osc2->phase>8192.0f) osc2->phase-=8192.0f;
@@ -1077,21 +1076,32 @@ void algoMonophonic2(float f, uint16_t* buf, uint16_t* buf2) {
   struct oscillator* osc= &oscillators[0];
   struct oscillator* osc2= &oscillators[1];
 
+  float f2 = 8192.0/2.0;
   float fr = f*detuneUp;
   float fl = f*detuneDown;
 
+  float preAmpDiff = intEnvelope(osc);
   float ampDiff = envelope(osc);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+    osc->amplitude += ampDiff;
+
     osc->phase += fl ;
     if (osc->phase>8192.0f) osc->phase-=8192.0f;
     osc2->phase += fr ;
     if (osc2->phase>8192.0f) osc2->phase-=8192.0f;
 
-    osc->amplitude += ampDiff;
+    osc->fm_amplitude += preAmpDiff;
 
-    buf[i]  = 2048+mainLut[(int)(osc->phase)] * osc->amplitude;
-    buf2[i] = 2048+mainLut[(int)(osc2->phase)] * osc->amplitude;
+    osc->fm_phase  = mainLut[(int)( osc->phase)] * osc->fm_amplitude *f2;
+    osc2->fm_phase = mainLut[(int)(osc2->phase)] * osc->fm_amplitude *f2;
+    while ( osc->fm_phase<0.0f) osc->fm_phase+=8192.0f;
+    while ( osc->fm_phase>=8192.0f) osc->fm_phase-=8192.0f;
+    while (osc2->fm_phase<0.0f) osc2->fm_phase+=8192.0f;
+    while (osc2->fm_phase>=8192.0f) osc2->fm_phase-=8192.0f;
+
+    buf[i]  = 2048+sinLut[(int)( osc->fm_phase)] * osc->amplitude;
+    buf2[i] = 2048+sinLut[(int)(osc2->fm_phase)] * osc->amplitude;
   }
 
 }
