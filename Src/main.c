@@ -230,7 +230,15 @@ void setWaveform(uint8_t id) {
 
   case wave_Hammondish:
     for (uint16_t i=0;i<8192;i++) {
-      mainLut[i]=sinLut[(i)&8191]*0.25 + sinLut[(i*2)&8191]*0.25 + sinLut[(i*3) &8191]*0.25 + sinLut[(i*4) &8191]*0.25;
+      //mainLut[i]=sinLut[(i)&8191]*0.25 + sinLut[(i*2)&8191]*0.25 + sinLut[(i*3) &8191]*0.25 + sinLut[(i*4) &8191]*0.25;
+      mainLut[i]=(sinLut[(i)&8191]
+                + sinLut[(i*2)&8191]
+                + sinLut[(i*3)&8191]
+                + sinLut[(i*4)&8191]
+                + sinLut[(i*6)&8191]
+                + sinLut[(i*8)&8191]
+                + sinLut[(i*10)&8191]
+                )*0.25;
     }
     break;
 
@@ -364,7 +372,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     break;
 
     case 76:
-      lfo_freq = 204.8 + (float)(i*4);
+      lfo_freq = i==127? 0.0: 204.8 + (float)(i*4);
     break;
 
     case 73: //Attack time
@@ -767,7 +775,7 @@ void noteOffMonophonic(uint8_t n, uint8_t chan) {
 }
 
 
-uint32_t random(void) {
+int32_t random(void) {
   static uint32_t seed = 123456;
   return seed = seed * 16807 % 0x7FFFFFFF;
 }
@@ -837,8 +845,15 @@ void USART1_IRQHandler(void) {
 
 inline float calculateFrequency(struct oscillator* osc){
 
-  osc->lfo_phase += lfo_freq;
-  if (osc->lfo_phase>8192.0f) osc->lfo_phase-=8192.0f;
+  int lfo;
+  if (lfo_freq == 0.0) {
+    //max wobble 0.5 semitones:
+    // 0x1000/(((0x7FFFFFFF>>2)-0x0FFFFFFF)*1024) = 1.4901161193847656e-8
+    lfo = ((float)((random()>>2)-0x0FFFFFFF) * channels[osc->channel].lfo_depth * 1.4901161193847656e-8);
+  } else {
+    lfo = sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth;
+  }
+
 
   float f;
 
@@ -847,10 +862,10 @@ inline float calculateFrequency(struct oscillator* osc){
     // We should probably enforce that LFO depth is never more than a semitone
     f = channels[osc->channel].tuning[ osc->notenumber]
       * bLookup14bit1semitone[ channels[osc->channel].bend +0x2000 ]
-      * bLookup14bit1semitone[ (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth) +0x2000 ];
+      * bLookup14bit1semitone[ lfo  +0x2000 ];
 
   } else {
-    int32_t bend = channels[osc->channel].bend + (int)(sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth);
+    int32_t bend = channels[osc->channel].bend + lfo ;
 
     f = channels[osc->channel].tuning[ osc->notenumber + (bend>>13) ]
       * bLookup14bit1semitone[ (bend&0x1FFF) +0x2000 ];
@@ -913,6 +928,8 @@ inline void graceful_theft(struct oscillator* osc){
 
 void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
+  phase_incr(osc->lfo_phase, lfo_freq)
+
   float f = calculateFrequency(osc);
   float preAmpDiff = intEnvelope(osc);
   float ampDiff = envelope(osc);
@@ -937,10 +954,9 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
 void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
+  phase_incr(osc->lfo_phase, lfo_freq)
+
   float f = calculateFrequency(osc);
-
-  float f2 = 8192.0/2.0;
-
   float preAmpDiff = intEnvelope(osc);
   float ampDiff = envelope(osc);
 
@@ -952,7 +968,7 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
     osc->fm_amplitude += preAmpDiff;
 
-    osc->fm_phase = mainLut[(int)(osc->phase)] * osc->fm_amplitude *f2;
+    osc->fm_phase = mainLut[(int)(osc->phase)] * osc->fm_amplitude *4096.0;
     phase_wrap(osc->fm_phase)
 
     buf[i] += sinLut[(int)(osc->fm_phase)] * osc->amplitude;
@@ -965,10 +981,10 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
 void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2) {
 
-  float f = calculateFrequency(osc);
+  phase_incr(osc->lfo_phase, lfo_freq)
 
-  float fr = f*detuneUp;
-  float fl = f*detuneDown;
+  float fr = calculateFrequency(osc)*detuneUp;
+  float fl = calculateFrequency(osc)*detuneDown;
 
   float preAmpDiff = intEnvelope(osc);
   float ampDiff = envelope(osc);
@@ -998,10 +1014,10 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 
 void oscAlgo2Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2){
 
-  float f = calculateFrequency(osc);
+  phase_incr(osc->lfo_phase, lfo_freq)
 
-  float fr = f*detuneUp;
-  float fl = f*detuneDown;
+  float fr = calculateFrequency(osc)*detuneUp;
+  float fl = calculateFrequency(osc)*detuneDown;
 
   float preAmpDiff = intEnvelope(osc);
   float ampDiff = envelope(osc);
@@ -1116,6 +1132,7 @@ void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
   static float f=0.0;
   struct oscillator* osc= &oscillators[0];
 
+  phase_incr(osc->lfo_phase, lfo_freq)
   float ft = calculateFrequency(osc);
   f += (ft-f)*portamento;
 
