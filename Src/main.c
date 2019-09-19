@@ -149,6 +149,7 @@ enum {
   wave_FifthSquare,
   wave_HardSaw,
   wave_SoftSaw,
+  wave_VarySaw,
   wave_SineEven,
   wave_AbsSineEven,
   wave_HardPulse,
@@ -218,7 +219,7 @@ void antialias(unsigned int radius){
 
 
 // TODO: normalize waveforms
-void setWaveform(uint8_t id) {
+void setWaveform(uint8_t id, uint8_t param) {
   if (id&0x80) return;
 
   // %8192 == &8191
@@ -238,13 +239,13 @@ void setWaveform(uint8_t id) {
     }
     #define addSine(m) for (uint16_t i=0;i<8192;i++) { mainLut[i]+= sinLut[(i*m)&8191]; }
 
-    if (waveParam&(1<<0)) addSine(2)
-    if (waveParam&(1<<1)) addSine(3)
-    if (waveParam&(1<<2)) addSine(4)
-    if (waveParam&(1<<3)) addSine(6)
-    if (waveParam&(1<<4)) addSine(8)
-    if (waveParam&(1<<5)) addSine(10)
-    if (waveParam&(1<<6)) addSine(12)
+    if (param&(1<<0)) addSine(2)
+    if (param&(1<<1)) addSine(3)
+    if (param&(1<<2)) addSine(4)
+    if (param&(1<<3)) addSine(6)
+    if (param&(1<<4)) addSine(8)
+    if (param&(1<<5)) addSine(10)
+    if (param&(1<<6)) addSine(12)
 
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]*=0.25;
@@ -260,13 +261,13 @@ void setWaveform(uint8_t id) {
     addSine(1);
     addSine(1);
 
-    if (waveParam&(1<<0)) {addSine(2); addSine(2); addSine(2);}
-    if (waveParam&(1<<1)) {addSine(3); addSine(3); }
-    if (waveParam&(1<<2)) {addSine(4); addSine(4); }
-    if (waveParam&(1<<3)) addSine(6)
-    if (waveParam&(1<<4)) addSine(8)
-    if (waveParam&(1<<5)) addSine(10)
-    if (waveParam&(1<<6)) addSine(12)
+    if (param&(1<<0)) {addSine(2); addSine(2); addSine(2);}
+    if (param&(1<<1)) {addSine(3); addSine(3); }
+    if (param&(1<<2)) {addSine(4); addSine(4); }
+    if (param&(1<<3)) addSine(6)
+    if (param&(1<<4)) addSine(8)
+    if (param&(1<<5)) addSine(10)
+    if (param&(1<<6)) addSine(12)
 
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]*=0.125;
@@ -341,9 +342,19 @@ void setWaveform(uint8_t id) {
       for (uint16_t i=0;i<512;i++) {
         mainLut[i]= j-=1.0/512.0;
       }
-
       for (uint16_t i=512;i<8192;i++) {
-        mainLut[i]= j+=1.0/8192.0;
+        mainLut[i]= j+=1.0/(8192.0-512);
+      }
+    }
+    break;
+  case wave_VarySaw:
+    {
+      float j=0.5, duty=param*32, downslope=1.0/duty, upslope=1.0/(8192.0-duty);
+      for (uint16_t i=0;i<duty;i++) {
+        mainLut[i]= j-=downslope;
+      }
+      for (uint16_t i=duty;i<8192;i++) {
+        mainLut[i]= j+=upslope;
       }
     }
     break;
@@ -367,16 +378,16 @@ void setWaveform(uint8_t id) {
     }
     break;
   case wave_HardPulse:
-    for (uint16_t i=0;i<(waveParam+1)*32;i++) {
+    for (uint16_t i=0;i<(param+1)*32;i++) {
       mainLut[i]=0.5;
     }
-    for (uint16_t i=(waveParam+1)*32;i<8192;i++) {
+    for (uint16_t i=(param+1)*32;i<8192;i++) {
       mainLut[i]=-0.5;
     }
     break;
   case wave_SoftPulse:
     { 
-      uint16_t i=0, duty=(waveParam+1)*28 +512;
+      uint16_t i=0, duty=(param+1)*28 +512;
       while (i<512) {
         mainLut[i]= (i/512.0) -0.5;
         i++;
@@ -403,7 +414,7 @@ void setWaveform(uint8_t id) {
 
 skipAntiAliasing:
 
-  if (id==targetWave) targetWave|=0x80;
+  if (id==targetWave && param==waveParam) targetWave|=0x80;
 }
 
 void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
@@ -1275,7 +1286,7 @@ int main(void) {
   loadPatch(0);
 
   while (1) {
-    setWaveform(targetWave);
+    setWaveform(targetWave, waveParam);
   }
 }
 
