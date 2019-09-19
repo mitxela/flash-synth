@@ -39,12 +39,12 @@ static void Error_Handler(void);
 uint16_t buffer[BUFFERSIZE*2] = {0};
 uint16_t buffer2[BUFFERSIZE*2] = {0};
 
-  float fm_freq;
-  float fm_depth;
-  float fm_decay;
-  float lfo_freq;
-  float detuneUp;
-  float detuneDown;
+float fm_freq;
+float fm_depth;
+float fm_decay;
+float lfo_freq;
+float detuneUp;
+float detuneDown;
 
 float releaseRate = -0.0025;
 float attackRate = 0.25;
@@ -52,6 +52,7 @@ float attackRate = 0.25;
 // float sustainLevel = 0.5;
 float fm_attack = 2.0;
 
+uint8_t waveParam =0x0F;
 uint8_t aa = 16;
 
 struct channel {
@@ -139,6 +140,7 @@ noteOff_t *noteOff = &noteOffDualOsc;
 enum {
   wave_Sine = 0,
   wave_Hammondish,
+  wave_Hammondish2,
   wave_SineCubed,
   wave_HalfSine,
   wave_AbsSine,
@@ -149,8 +151,8 @@ enum {
   wave_SoftSaw,
   wave_SineEven,
   wave_AbsSineEven,
-  wave_HardPulse25,
-  wave_HardPulse33
+  wave_HardPulse,
+  wave_SoftPulse
 };
 
 #define phase_incr(x, y) \
@@ -214,9 +216,10 @@ void antialias(unsigned int radius){
 
 }
 
-void setWaveform(uint8_t id) {
-  if (id==255) return;
+
 // TODO: normalize waveforms
+void setWaveform(uint8_t id) {
+  if (id&0x80) return;
 
   // %8192 == &8191
 
@@ -229,18 +232,47 @@ void setWaveform(uint8_t id) {
     break;
 
   case wave_Hammondish:
+
     for (uint16_t i=0;i<8192;i++) {
-      //mainLut[i]=sinLut[(i)&8191]*0.25 + sinLut[(i*2)&8191]*0.25 + sinLut[(i*3) &8191]*0.25 + sinLut[(i*4) &8191]*0.25;
-      mainLut[i]=(sinLut[(i)&8191]
-                + sinLut[(i*2)&8191]
-                + sinLut[(i*3)&8191]
-                + sinLut[(i*4)&8191]
-                + sinLut[(i*6)&8191]
-                + sinLut[(i*8)&8191]
-                + sinLut[(i*10)&8191]
-                )*0.25;
+      mainLut[i]=sinLut[i];
     }
-    break;
+    #define addSine(m) for (uint16_t i=0;i<8192;i++) { mainLut[i]+= sinLut[(i*m)&8191]; }
+
+    if (waveParam&(1<<0)) addSine(2)
+    if (waveParam&(1<<1)) addSine(3)
+    if (waveParam&(1<<2)) addSine(4)
+    if (waveParam&(1<<3)) addSine(6)
+    if (waveParam&(1<<4)) addSine(8)
+    if (waveParam&(1<<5)) addSine(10)
+    if (waveParam&(1<<6)) addSine(12)
+
+    for (uint16_t i=0;i<8192;i++) {
+      mainLut[i]*=0.25;
+    }
+
+    goto skipAntiAliasing;
+
+  case wave_Hammondish2:
+
+    for (uint16_t i=0;i<8192;i++) {
+      mainLut[i]=sinLut[i];
+    }
+    addSine(1);
+    addSine(1);
+
+    if (waveParam&(1<<0)) {addSine(2); addSine(2); addSine(2);}
+    if (waveParam&(1<<1)) {addSine(3); addSine(3); }
+    if (waveParam&(1<<2)) {addSine(4); addSine(4); }
+    if (waveParam&(1<<3)) addSine(6)
+    if (waveParam&(1<<4)) addSine(8)
+    if (waveParam&(1<<5)) addSine(10)
+    if (waveParam&(1<<6)) addSine(12)
+
+    for (uint16_t i=0;i<8192;i++) {
+      mainLut[i]*=0.125;
+    }
+
+    goto skipAntiAliasing;
 
   case wave_SineCubed:
     for (uint16_t i=0;i<8192;i++) {
@@ -315,7 +347,7 @@ void setWaveform(uint8_t id) {
       }
     }
     break;
-  case wave_SineEven: // sine-even
+  case wave_SineEven:
     for (uint16_t i=0;i<4096;i++) {
       mainLut[i]= sinLut[i*2];
     }
@@ -323,7 +355,7 @@ void setWaveform(uint8_t id) {
       mainLut[i]= 0.0;
     }
     break;
-  case wave_AbsSineEven: // abs sine-even
+  case wave_AbsSineEven:
     for (uint16_t i=0;i<2048;i++) {
       mainLut[i]= sinLut[i*2];
     }
@@ -334,20 +366,33 @@ void setWaveform(uint8_t id) {
       mainLut[i]= 0.0;
     }
     break;
-  case wave_HardPulse25: // hard pulse 25%
-    for (uint16_t i=0;i<2048;i++) {
+  case wave_HardPulse:
+    for (uint16_t i=0;i<(waveParam+1)*32;i++) {
       mainLut[i]=0.5;
     }
-    for (uint16_t i=2048;i<8192;i++) {
+    for (uint16_t i=(waveParam+1)*32;i<8192;i++) {
       mainLut[i]=-0.5;
     }
     break;
-  case wave_HardPulse33: // hard pulse 33%
-    for (uint16_t i=0;i<2731;i++) {
-      mainLut[i]=0.5;
-    }
-    for (uint16_t i=2731;i<8192;i++) {
-      mainLut[i]=-0.5;
+  case wave_SoftPulse:
+    { 
+      uint16_t i=0, duty=(waveParam+1)*28 +512;
+      while (i<512) {
+        mainLut[i]= (i/512.0) -0.5;
+        i++;
+      }
+      while (i<duty) {
+        mainLut[i]=0.5;
+        i++;
+      }
+      while (i<duty+512) {
+        mainLut[i]= ((512-i+duty)/512.0) -0.5;
+        i++;
+      }
+      while (i<8192) {
+        mainLut[i]=-0.5;
+        i++;
+      }
     }
     break;
 
@@ -356,7 +401,9 @@ void setWaveform(uint8_t id) {
   antialias((aa<<3)+8);
   antialias((aa<<3)+8);
 
-  if (id==targetWave) targetWave=255;
+skipAntiAliasing:
+
+  if (id==targetWave) targetWave|=0x80;
 }
 
 void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
@@ -476,6 +523,10 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     break;
     case 26:
       //aa = i;
+      waveParam = i;
+      targetWave&=0x7F;
+    break;
+    case 27:
       arpegSpeed=(i>>2);
 
       
