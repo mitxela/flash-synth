@@ -466,6 +466,10 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     case 24:
       {
         for (int i=POLYPHONY;i--;) oscillators[i].alive=0;
+        oscillators[0].released=1;
+        oscillators[0].amplitude=0;
+        monoNoteNow=monoNoteEnd=monoNoteReleaseEnd=0;
+        monoNoteTimer=254;
         switch (i){
           case 1:
             doOscillatorStereo = &oscAlgo1Stereo;
