@@ -111,7 +111,8 @@ doOsc_t *doOscillator = &oscAlgo1;
 typedef void doOscStereo_t(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2);
 doOscStereo_t oscAlgo1Stereo;
 doOscStereo_t oscAlgo2Stereo;
-doOscStereo_t oscAlgo1BondedStereo;
+doOscStereo_t oscAlgo1Quad;
+doOscStereo_t oscAlgo2Quad;
 doOscStereo_t *doOscillatorStereo = &oscAlgo1Stereo;
 
 typedef void monophonicAlgo_t(float f, uint16_t* buf, uint16_t* buf2);
@@ -119,28 +120,28 @@ monophonicAlgo_t algoMonophonic1;
 monophonicAlgo_t algoMonophonic2;
 monophonicAlgo_t *monophonicAlgo = &algoMonophonic2;
 
-typedef void doOscQuad_t(struct oscillator* osc, struct oscillator* osc2, struct oscillator* osc3, struct oscillator* osc4, uint16_t* buf, uint16_t* buf2);
-doOscQuad_t oscAlgo1Quad;
-doOscQuad_t *doOscillatorQuad = &oscAlgo1Quad;
+typedef void doOscPoly4_t(struct oscillator* osc, struct oscillator* osc2, struct oscillator* osc3, struct oscillator* osc4, uint16_t* buf, uint16_t* buf2);
+doOscPoly4_t oscAlgo1Poly4;
+doOscPoly4_t *doOscillatorPoly4 = &oscAlgo1Poly4;
 
 typedef void generateIntoBuffer_t(uint16_t* buf, uint16_t* buf2);
 generateIntoBuffer_t generateIntoBufferFullPoly;
 generateIntoBuffer_t generateIntoBufferDualOsc;
-generateIntoBuffer_t generateIntoBufferQuadOsc;
+generateIntoBuffer_t generateIntoBufferPoly4;
 generateIntoBuffer_t generateIntoBufferMonophonic;
 generateIntoBuffer_t *generateIntoBuffer = &generateIntoBufferFullPoly;
 
 typedef void noteOn_t(uint8_t n, uint8_t vel, uint8_t chan);
 noteOn_t noteOnFullPoly;
 noteOn_t noteOnDualOsc;
-noteOn_t noteOnQuadOsc;
+noteOn_t noteOnPoly4;
 noteOn_t noteOnMonophonic;
 noteOn_t *noteOn = &noteOnDualOsc;
 
 typedef void noteOff_t(uint8_t n, uint8_t chan);
 noteOff_t noteOffFullPoly;
 noteOff_t noteOffDualOsc;
-noteOff_t noteOffQuadOsc;
+noteOff_t noteOffPoly4;
 noteOff_t noteOffMonophonic;
 noteOff_t *noteOff = &noteOffDualOsc;
 
@@ -168,11 +169,12 @@ enum {
   algo_1_poly = 0,
   algo_1_stereo,
   algo_1_mono,
+  algo_1_quad,
   algo_2_poly,
   algo_2_stereo,
   algo_2_mono,
-  //algo_1_quad,
-  algo_1_bonded_stereo
+  algo_2_quad
+  //algo_1_poly4
 };
 
 #define phase_incr(x, y) \
@@ -548,16 +550,23 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             setStereo(1);
             break;
 
-          // case algo_1_quad:
-            // doOscillatorQuad = &oscAlgo1Quad;
-            // generateIntoBuffer = &generateIntoBufferQuadOsc;
-            // noteOn = &noteOnQuadOsc;
-            // noteOff = &noteOffQuadOsc;
+          // case algo_1_poly:
+            // doOscillatorPoly4 = &oscAlgo1Poly4;
+            // generateIntoBuffer = &generateIntoBufferPoly4;
+            // noteOn = &noteOnPoly4;
+            // noteOff = &noteOffPoly4;
             // setStereo(1);
             // break;
 
-          case algo_1_bonded_stereo:
-            doOscillatorStereo = &oscAlgo1BondedStereo;
+          case algo_1_quad:
+            doOscillatorStereo = &oscAlgo1Quad;
+            generateIntoBuffer = &generateIntoBufferDualOsc;
+            noteOn = &noteOnDualOsc;
+            noteOff = &noteOffDualOsc;
+            setStereo(1);
+            break;
+          case algo_2_quad:
+            doOscillatorStereo = &oscAlgo2Quad;
             generateIntoBuffer = &generateIntoBufferDualOsc;
             noteOn = &noteOnDualOsc;
             noteOff = &noteOffDualOsc;
@@ -875,7 +884,7 @@ void noteOffMonophonic(uint8_t n, uint8_t chan) {
   }
 }
 
-void noteOnQuadOsc(uint8_t n, uint8_t vel, uint8_t chan) {
+void noteOnPoly4(uint8_t n, uint8_t vel, uint8_t chan) {
 // Identical to dual osc except for loop increment
   uint8_t i, oldest, similar=255;
   uint32_t mintime=0xffffffff;
@@ -909,7 +918,7 @@ void noteOnQuadOsc(uint8_t n, uint8_t vel, uint8_t chan) {
   oscillators[i].velocity=vel;
 }
 
-void noteOffQuadOsc(uint8_t n, uint8_t chan) {
+void noteOffPoly4(uint8_t n, uint8_t chan) {
 // Identical to dual osc except for loop increment
   for (uint8_t i=0; i<POLYPHONY; i+=4) {
     if ( oscillators[i].alive 
@@ -1199,7 +1208,7 @@ void oscAlgo2Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
   graceful_theft(osc);
 }
 
-void oscAlgo1BondedStereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2) {
+void oscAlgo1Quad(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2) {
 
   // reuse "unused" floats in second oscillator
   // lfo_phase, fm_phase
@@ -1239,7 +1248,43 @@ void oscAlgo1BondedStereo(struct oscillator* osc, struct oscillator* osc2, uint1
   graceful_theft(osc);
 }
 
-void oscAlgo1Quad(struct oscillator* osc, struct oscillator* osc2, struct oscillator* osc3, struct oscillator* osc4, uint16_t* buf, uint16_t* buf2) {
+void oscAlgo2Quad(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2){
+
+  phase_incr(osc->lfo_phase, lfo_freq)
+
+  float fr = calculateFrequency(osc)*detuneUp;
+  float fl = calculateFrequency(osc)*detuneDown;
+  float f3 = calculateFrequency(osc)*detuneUp*detuneUp;
+  float f4 = calculateFrequency(osc)*detuneDown*detuneDown;
+
+  float preAmpDiff = intEnvelope(osc);
+  float ampDiff = envelope(osc);
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+
+    osc->amplitude += ampDiff;
+
+    phase_incr(osc->phase, fl)
+    phase_incr(osc2->phase, fr)
+    phase_incr(osc2->lfo_phase, f3)
+    phase_incr(osc2->fm_phase, f4)
+
+    osc->fm_amplitude += preAmpDiff;
+
+    osc->fm_phase  = (mainLut[(int)(osc->phase)] + mainLut[(int)(osc2->lfo_phase)])* osc->fm_amplitude *4096.0;
+    phase_wrap(osc->fm_phase)
+    buf[i] += sinLut[(int)(osc->fm_phase)] * osc->amplitude;
+
+    osc->fm_phase = (mainLut[(int)(osc2->phase)]+ mainLut[(int)(osc2->fm_phase)]) * osc->fm_amplitude *4096.0;
+    phase_wrap(osc->fm_phase)
+    buf2[i]+= sinLut[(int)(osc->fm_phase)] * osc->amplitude;
+
+  }
+
+  graceful_theft(osc);
+}
+
+void oscAlgo1Poly4(struct oscillator* osc, struct oscillator* osc2, struct oscillator* osc3, struct oscillator* osc4, uint16_t* buf, uint16_t* buf2) {
 
   phase_incr(osc->lfo_phase, lfo_freq)
 
@@ -1386,13 +1431,13 @@ void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
 
 }
 
-void generateIntoBufferQuadOsc(uint16_t* buf, uint16_t* buf2){
+void generateIntoBufferPoly4(uint16_t* buf, uint16_t* buf2){
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048; buf2[i]=2048;}
 
   for (uint8_t i=0; i<POLYPHONY; i+=4) {
     if (oscillators[i].alive)
-      doOscillatorQuad(&oscillators[i], &oscillators[i+1], &oscillators[i+2], &oscillators[i+3], buf, buf2);
+      doOscillatorPoly4(&oscillators[i], &oscillators[i+1], &oscillators[i+2], &oscillators[i+3], buf, buf2);
   }
 }
 
