@@ -175,6 +175,29 @@ enum {
   //algo_1_poly4
 };
 
+enum {
+  cc_modulation = 1,
+  cc_portamento = 5,
+  cc_sustain = 64,
+  cc_lfo_freq = 76,
+  cc_attack_rate = 73,
+  cc_release_rate = 72,
+  cc_detune = 15,
+  cc_fm_freq = 20,
+  cc_fm_freq_fine = 21,
+  cc_fm_depth = 22,
+  cc_fm_attack_rate = 75,
+  cc_fm_decay_rate = 23,
+  cc_algo = 24,
+  cc_waveform = 25,
+  cc_wave_param = 26,
+  cc_arpeg_speed = 27,
+
+  cc_per_channel_tuning = 3,
+  cc_all_channels_tuning = 9
+  // 6, 38, 100, 101 RPN stuff
+};
+
 #define phase_incr(x, y) \
   x += y; \
   if (x >8192.0f) x-=8192.0f;
@@ -433,54 +456,53 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
   #define set_fm_attack() fm_attack = (fm_depth * 0.001/((float)fm_attack_cc+0.5));
 
   switch (cc) {
-    case 1: //modulation
+    case cc_modulation:
       channels[chan].mod = i;
       channels[chan].lfo_depth = (float)(i*8);
       break;
-    case 5: //portamento
+    case cc_portamento:
       portamento = (float)(128-i) /128.0;
       break;
 
-    case 76:
+    case cc_lfo_freq:
       lfo_freq = i==127? 0.0: 204.8 + (float)(i*4);
       break;
 
-    case 73: //Attack time
+    case cc_attack_rate:
       attackRate = (0.128/(float)(i+1));
       break;
-    case 72: //Release time
+    case cc_release_rate:
       releaseRate = -(0.128/(float)(i+1));
       break;
 
-    case 15:{
+    case cc_detune:{
         float detune= ((float)(i)/10160.0);
         detuneUp = 1.0 + detune;
         detuneDown = 1.0 - detune;
       }
       break;
 
-    case 20:
+    case cc_fm_freq:
       fm_freq_cc[0] = i;
       set_fm_freq()
       break;
-    case 21:
+    case cc_fm_freq_fine:
       fm_freq_cc[1] = i;
       set_fm_freq()
       break;
-    case 22:
-
+    case cc_fm_depth:
       fm_depth=(float)(i*25)/127;
       set_fm_attack()
       break;
-    case 75:
+    case cc_fm_attack_rate:
       fm_attack_cc=i;
       set_fm_attack()
       break;
 
-    case 23:
+    case cc_fm_decay_rate:
       fm_decay=1.0 - ((float)(i*i)/25400000);
       break;
-    case 24:
+    case cc_algo:
       {
         for (int i=POLYPHONY;i--;) oscillators[i].alive=0;
         oscillators[0].released=1;
@@ -562,19 +584,19 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       }
       break;
 
-    case 25:
+    case cc_waveform:
       targetWave = i;
       break;
-    case 26:
+    case cc_wave_param:
       waveParam = i;
       targetWave&=0x7F;
       break;
-    case 27:
+    case cc_arpeg_speed:
       arpegSpeed=(i>>2);
       break;
 
 
-    case 64: //sustain pedal
+    case cc_sustain: 
       channels[chan].sustain = (i>63);
       if (channels[chan].sustain == 0) {//pedal released
         if (noteOff == &noteOffMonophonic) {
@@ -624,7 +646,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       }
       break;
 
-    case 3: // Per-channel tuning
+    case cc_per_channel_tuning:
       if (i == 0) {
           channels[chan].pbSensitivity=DEFAULT_PB_RANGE;
           channels[chan].tuning = &fEqualLookup[0];
@@ -634,7 +656,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       }
       break;
 
-    case 9: // All channels tuning
+    case cc_all_channels_tuning:
       if (i == 0) {
         for (int j=0;j<16;j++) {
           channels[j].pbSensitivity=DEFAULT_PB_RANGE;
@@ -653,7 +675,19 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
 void loadPatch(uint8_t p){
   // Link between byte position in the patch file and CC number
   const uint8_t paramMap[64] = {
-    20,21,22,23,24,25,76,15 
+    cc_algo,
+    cc_fm_freq,
+    cc_fm_freq_fine,
+    cc_fm_depth,
+    cc_fm_attack_rate,
+    cc_fm_decay_rate,
+    cc_attack_rate,
+    cc_release_rate,
+    cc_waveform,
+    cc_wave_param,
+    cc_lfo_freq,
+    cc_detune, 
+    cc_arpeg_speed
   };
   for (uint8_t i=0;i<64;i++)
     parameterChange(0, paramMap[i], bPatches[p][i]);
