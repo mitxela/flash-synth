@@ -427,7 +427,10 @@ skipAntiAliasing:
 }
 
 void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
-  static uint8_t fm_freq_cc[] = {0,0};
+  static uint8_t fm_freq_cc[] = {0,0}, fm_attack_cc=0;
+
+  #define set_fm_freq() fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
+  #define set_fm_attack() fm_attack = (fm_depth * 0.001/((float)fm_attack_cc+0.5));
 
   switch (cc) {
     case 1: //modulation
@@ -445,9 +448,6 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     case 73: //Attack time
       attackRate = (0.128/(float)(i+1));
       break;
-    case 75: //Decay time
-      fm_attack = (0.01/((float)i+0.5));
-      break;
     case 72: //Release time
       releaseRate = -(0.128/(float)(i+1));
       break;
@@ -461,22 +461,22 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
 
     case 20:
       fm_freq_cc[0] = i;
-      fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
+      set_fm_freq()
       break;
     case 21:
       fm_freq_cc[1] = i;
-      fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
+      set_fm_freq()
       break;
     case 22:
-      {
-        // float factor = fm_depth;
-        fm_depth=(float)(i*25)/127;
-        // factor = fm_depth/factor; 
-        // for (uint8_t j=POLYPHONY; j--;) {
-          // oscillators[j].fm_amplitude *= factor;
-        // }
-      }
+
+      fm_depth=(float)(i*25)/127;
+      set_fm_attack()
       break;
+    case 75:
+      fm_attack_cc=i;
+      set_fm_attack()
+      break;
+
     case 23:
       fm_decay=1.0 - ((float)(i*i)/25400000);
       break;
