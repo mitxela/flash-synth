@@ -991,25 +991,50 @@ inline float calculateFrequency(struct oscillator* osc){
     lfo = sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth;
   }
 
-
   float f;
 
   if (channels[osc->channel].pbSensitivity == 1) {
-
     // We should probably enforce that LFO depth is never more than a semitone
     f = channels[osc->channel].tuning[ osc->notenumber]
       * bLookup14bit1semitone[ channels[osc->channel].bend +0x2000 ]
       * bLookup14bit1semitone[ lfo  +0x2000 ];
-
   } else {
     int32_t bend = channels[osc->channel].bend + lfo ;
-
     f = channels[osc->channel].tuning[ osc->notenumber + (bend>>13) ]
       * bLookup14bit1semitone[ (bend&0x1FFF) +0x2000 ];
   }
-
   return f;
 }
+
+static inline float calculateFrequencyMonophonic(struct oscillator* osc){
+  // Lots of repetition here - but it's the only way to ensure that portamento happens before LFO.
+  static float f=0.0;
+
+  phase_incr(osc->lfo_phase, lfo_freq)
+  int lfo;
+  if (lfo_freq == 0.0) {
+    //max wobble 0.5 semitones:
+    // 0x1000/(((0x7FFFFFFF>>2)-0x0FFFFFFF)*1024) = 1.4901161193847656e-8
+    lfo = ((float)((random()>>2)-0x0FFFFFFF) * channels[osc->channel].lfo_depth * 1.4901161193847656e-8);
+  } else {
+    lfo = sinLut[(int)(osc->lfo_phase)] * channels[osc->channel].lfo_depth;
+  }
+
+  float ft;
+
+  if (channels[osc->channel].pbSensitivity == 1) {
+    ft = channels[osc->channel].tuning[ osc->notenumber]
+      * bLookup14bit1semitone[ channels[osc->channel].bend +0x2000 ];
+  } else {
+    ft = channels[osc->channel].tuning[ osc->notenumber + (channels[osc->channel].bend>>13) ]
+      * bLookup14bit1semitone[ (channels[osc->channel].bend&0x1FFF) +0x2000 ];
+  }
+
+  f += (ft-f)*portamento;
+
+  return f * bLookup14bit1semitone[ lfo  +0x2000 ];
+}
+
 
 // Generate a cachable envelope delta. Warp the edges so that state transitions always happen at the buffer boundaries
 inline float envelope(struct oscillator* osc){
@@ -1382,12 +1407,8 @@ void generateIntoBufferDualOsc(uint16_t* buf, uint16_t* buf2){
 
 void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
 
-  static float f=0.0;
   struct oscillator* osc= &oscillators[0];
-
-  phase_incr(osc->lfo_phase, lfo_freq)
-  float ft = calculateFrequency(osc);
-  f += (ft-f)*portamento;
+  float f = calculateFrequencyMonophonic(osc);
 
   if (arpegSpeed!=31 && ++monoNoteTimer>arpegSpeed) {
     monoNoteNow+=2;
