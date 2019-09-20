@@ -111,6 +111,7 @@ doOsc_t *doOscillator = &oscAlgo1;
 typedef void doOscStereo_t(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2);
 doOscStereo_t oscAlgo1Stereo;
 doOscStereo_t oscAlgo2Stereo;
+doOscStereo_t oscAlgo1BondedStereo;
 doOscStereo_t *doOscillatorStereo = &oscAlgo1Stereo;
 
 typedef void monophonicAlgo_t(float f, uint16_t* buf, uint16_t* buf2);
@@ -118,21 +119,28 @@ monophonicAlgo_t algoMonophonic1;
 monophonicAlgo_t algoMonophonic2;
 monophonicAlgo_t *monophonicAlgo = &algoMonophonic2;
 
+typedef void doOscQuad_t(struct oscillator* osc, struct oscillator* osc2, struct oscillator* osc3, struct oscillator* osc4, uint16_t* buf, uint16_t* buf2);
+doOscQuad_t oscAlgo1Quad;
+doOscQuad_t *doOscillatorQuad = &oscAlgo1Quad;
+
 typedef void generateIntoBuffer_t(uint16_t* buf, uint16_t* buf2);
 generateIntoBuffer_t generateIntoBufferFullPoly;
 generateIntoBuffer_t generateIntoBufferDualOsc;
+generateIntoBuffer_t generateIntoBufferQuadOsc;
 generateIntoBuffer_t generateIntoBufferMonophonic;
 generateIntoBuffer_t *generateIntoBuffer = &generateIntoBufferFullPoly;
 
 typedef void noteOn_t(uint8_t n, uint8_t vel, uint8_t chan);
 noteOn_t noteOnFullPoly;
 noteOn_t noteOnDualOsc;
+noteOn_t noteOnQuadOsc;
 noteOn_t noteOnMonophonic;
 noteOn_t *noteOn = &noteOnDualOsc;
 
 typedef void noteOff_t(uint8_t n, uint8_t chan);
 noteOff_t noteOffFullPoly;
 noteOff_t noteOffDualOsc;
+noteOff_t noteOffQuadOsc;
 noteOff_t noteOffMonophonic;
 noteOff_t *noteOff = &noteOffDualOsc;
 
@@ -154,6 +162,17 @@ enum {
   wave_AbsSineEven,
   wave_HardPulse,
   wave_SoftPulse
+};
+
+enum {
+  algo_1_poly = 0,
+  algo_1_stereo,
+  algo_1_mono,
+  algo_2_poly,
+  algo_2_stereo,
+  algo_2_mono,
+  //algo_1_quad,
+  algo_1_bonded_stereo
 };
 
 #define phase_incr(x, y) \
@@ -230,7 +249,7 @@ void setWaveform(uint8_t id, uint8_t param) {
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]=sinLut[i];
     }
-    break;
+    goto skipAntiAliasing;
 
   case wave_Hammondish:
 
@@ -482,14 +501,22 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
         monoNoteNow=monoNoteEnd=monoNoteReleaseEnd=0;
         monoNoteTimer=254;
         switch (i){
-          case 1:
+          case algo_1_poly: default:
+            doOscillator = &oscAlgo1;
+            generateIntoBuffer = &generateIntoBufferFullPoly;
+            noteOn = &noteOnFullPoly;
+            noteOff = &noteOffFullPoly;
+            setStereo(0);
+            break;
+
+          case algo_1_stereo:
             doOscillatorStereo = &oscAlgo1Stereo;
             generateIntoBuffer = &generateIntoBufferDualOsc;
             noteOn = &noteOnDualOsc;
             noteOff = &noteOffDualOsc;
             setStereo(1);
             break;
-          case 2:
+          case algo_2_poly:
             doOscillator = &oscAlgo2;
             generateIntoBuffer = &generateIntoBufferFullPoly;
             noteOn = &noteOnFullPoly;
@@ -497,7 +524,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             setStereo(0);
             break;
 
-          case 3:
+          case algo_2_stereo:
             doOscillatorStereo = &oscAlgo2Stereo;
             generateIntoBuffer = &generateIntoBufferDualOsc;
             noteOn = &noteOnDualOsc;
@@ -505,7 +532,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             setStereo(1);
             break;
 
-          case 4:
+          case algo_1_mono:
             monophonicAlgo = &algoMonophonic1;
             generateIntoBuffer = &generateIntoBufferMonophonic;
             noteOn = &noteOnMonophonic;
@@ -513,8 +540,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             setStereo(1);
             break;
 
-
-          case 5:
+          case algo_2_mono:
             monophonicAlgo = &algoMonophonic2;
             generateIntoBuffer = &generateIntoBufferMonophonic;
             noteOn = &noteOnMonophonic;
@@ -522,13 +548,22 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             setStereo(1);
             break;
 
+          // case algo_1_quad:
+            // doOscillatorQuad = &oscAlgo1Quad;
+            // generateIntoBuffer = &generateIntoBufferQuadOsc;
+            // noteOn = &noteOnQuadOsc;
+            // noteOff = &noteOffQuadOsc;
+            // setStereo(1);
+            // break;
 
-          default:
-            doOscillator = &oscAlgo1;
-            generateIntoBuffer = &generateIntoBufferFullPoly;
-            noteOn = &noteOnFullPoly;
-            noteOff = &noteOffFullPoly;
-            setStereo(0);
+          case algo_1_bonded_stereo:
+            doOscillatorStereo = &oscAlgo1BondedStereo;
+            generateIntoBuffer = &generateIntoBufferDualOsc;
+            noteOn = &noteOnDualOsc;
+            noteOff = &noteOffDualOsc;
+            setStereo(1);
+            break;
+
         }
       }
     break;
@@ -840,6 +875,59 @@ void noteOffMonophonic(uint8_t n, uint8_t chan) {
   }
 }
 
+void noteOnQuadOsc(uint8_t n, uint8_t vel, uint8_t chan) {
+// Identical to dual osc except for loop increment
+  uint8_t i, oldest, similar=255;
+  uint32_t mintime=0xffffffff;
+
+  for (i=0; i<POLYPHONY; i+=4) {
+    if (0==oscillators[i].alive) break;
+    if (oscillators[i].notenumber == n) {
+      similar = i;
+    }
+    if (oscillators[i].starttime < mintime) {
+      oldest = i;
+      mintime = oscillators[i].starttime;
+    }
+  }
+
+  if (i==POLYPHONY) {
+    i = (similar==255)?oldest:similar;
+    oscillators[i].stolen=n;
+    oscillators[i].stolenChannel=chan;
+  } else {
+    oscillators[i].notenumber=n;
+    oscillators[i].channel=chan;
+    oscillators[i].stolen=0;
+    trigger_int_envelope(&oscillators[i], vel, n);
+  }
+
+  oscillators[i].alive = 1;
+  oscillators[i].starttime = timestamp++;
+  oscillators[i].released = 0;
+  oscillators[i].sustained = 0;
+  oscillators[i].velocity=vel;
+}
+
+void noteOffQuadOsc(uint8_t n, uint8_t chan) {
+// Identical to dual osc except for loop increment
+  for (uint8_t i=0; i<POLYPHONY; i+=4) {
+    if ( oscillators[i].alive 
+     && !oscillators[i].released 
+     && oscillators[i].notenumber==n 
+     && oscillators[i].channel==chan 
+     && !oscillators[i].sustained
+     ){
+      if (channels[chan].sustain) {
+        oscillators[i].sustained=1;
+      } else {
+        oscillators[i].released=1;
+      }
+      break;
+    }
+  }
+
+}
 
 int32_t random(void) {
   static uint32_t seed = 123456;
@@ -1111,6 +1199,86 @@ void oscAlgo2Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
   graceful_theft(osc);
 }
 
+void oscAlgo1BondedStereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2) {
+
+  // reuse "unused" floats in second oscillator
+  // lfo_phase, fm_phase
+
+  phase_incr(osc->lfo_phase, lfo_freq)
+
+  float fr = calculateFrequency(osc)*detuneUp;
+  float fl = calculateFrequency(osc)*detuneDown;
+  float f3 = calculateFrequency(osc)*detuneUp*detuneUp;
+  float f4 = calculateFrequency(osc)*detuneDown*detuneDown;
+
+  float preAmpDiff = intEnvelope(osc);
+  float ampDiff = envelope(osc);
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+
+    osc->amplitude += ampDiff;
+
+    phase_incr(osc->fm_phase, fm_freq*fr)
+
+    osc->fm_amplitude += preAmpDiff;
+
+    osc->phase      += fl + sinLut[(int)(osc->fm_phase)]*osc->fm_amplitude *fl;
+    osc2->lfo_phase += f3 + sinLut[(int)(osc->fm_phase)]*osc->fm_amplitude *f3;
+    osc2->phase     += fr + sinLut[(int)(osc->fm_phase)]*osc->fm_amplitude *fr;
+    osc2->fm_phase  += f4 + sinLut[(int)(osc->fm_phase)]*osc->fm_amplitude *f4;
+    phase_wrap(osc->phase)
+    phase_wrap(osc2->phase)
+    phase_wrap(osc2->lfo_phase)
+    phase_wrap(osc2->fm_phase)
+
+    buf[i] += (mainLut[(int)(osc->phase)] + mainLut[(int)(osc2->lfo_phase)])* osc->amplitude;
+    buf2[i]+= (mainLut[(int)(osc2->phase)]+ mainLut[(int)(osc2->fm_phase)]) * osc->amplitude;
+
+  }
+
+  graceful_theft(osc);
+}
+
+void oscAlgo1Quad(struct oscillator* osc, struct oscillator* osc2, struct oscillator* osc3, struct oscillator* osc4, uint16_t* buf, uint16_t* buf2) {
+
+  phase_incr(osc->lfo_phase, lfo_freq)
+
+  float f1 = calculateFrequency(osc)*detuneUp;
+  float f2 = calculateFrequency(osc)*detuneDown;
+  float f3 = calculateFrequency(osc)*detuneUp*detuneUp;
+  float f4 = calculateFrequency(osc)*detuneDown*detuneDown;
+
+  float preAmpDiff = intEnvelope(osc);
+  float ampDiff = envelope(osc);
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+
+    osc->amplitude += ampDiff;
+
+    phase_incr(osc->fm_phase, fm_freq*f1)
+    phase_incr(osc2->fm_phase,fm_freq*f2)
+    phase_incr(osc3->fm_phase,fm_freq*f3)
+    phase_incr(osc4->fm_phase,fm_freq*f4)
+
+    osc->fm_amplitude += preAmpDiff;
+
+    osc->phase  += f1 + sinLut[(int)( osc->fm_phase)]*osc->fm_amplitude *f1;
+    osc2->phase += f2 + sinLut[(int)(osc2->fm_phase)]*osc->fm_amplitude *f2;
+    osc3->phase += f3 + sinLut[(int)(osc3->fm_phase)]*osc->fm_amplitude *f3;
+    osc4->phase += f4 + sinLut[(int)(osc4->fm_phase)]*osc->fm_amplitude *f4;
+    phase_wrap(osc->phase)
+    phase_wrap(osc2->phase)
+    phase_wrap(osc3->phase)
+    phase_wrap(osc4->phase)
+
+    buf[i] += (mainLut[(int)(osc->phase)] + mainLut[(int)(osc3->phase)])* osc->amplitude;
+    buf2[i]+= (mainLut[(int)(osc2->phase)]+ mainLut[(int)(osc4->phase)])* osc->amplitude;
+
+  }
+
+  graceful_theft(osc);
+}
+
 
 void algoMonophonic1(float f, uint16_t* buf, uint16_t* buf2) {
 
@@ -1218,6 +1386,15 @@ void generateIntoBufferMonophonic(uint16_t* buf, uint16_t* buf2){
 
 }
 
+void generateIntoBufferQuadOsc(uint16_t* buf, uint16_t* buf2){
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i]=2048; buf2[i]=2048;}
+
+  for (uint8_t i=0; i<POLYPHONY; i+=4) {
+    if (oscillators[i].alive)
+      doOscillatorQuad(&oscillators[i], &oscillators[i+1], &oscillators[i+2], &oscillators[i+3], buf, buf2);
+  }
+}
 
 void DMA1_Channel3_IRQHandler(void)
 {
