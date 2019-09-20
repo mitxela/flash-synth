@@ -48,8 +48,6 @@ float detuneDown;
 
 float releaseRate = -0.0025;
 float attackRate = 0.25;
-// float decayRate = 0.25;
-// float sustainLevel = 0.5;
 float fm_attack = 2.0;
 
 uint8_t waveParam =0x0F;
@@ -435,43 +433,40 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     case 1: //modulation
       channels[chan].mod = i;
       channels[chan].lfo_depth = (float)(i*8);
-    break;
+      break;
     case 5: //portamento
       portamento = (float)(128-i) /128.0;
-    break;
+      break;
 
     case 76:
       lfo_freq = i==127? 0.0: 204.8 + (float)(i*4);
-    break;
+      break;
 
     case 73: //Attack time
       attackRate = (0.128/(float)(i+1));
-    break;
-     case 75: //Decay time
+      break;
+    case 75: //Decay time
       fm_attack = (0.01/((float)i+0.5));
-     break;
-    // case 74: //Sustain time
-      // sustainLevel = (float)((i+1)*0.001);
-    // break;
+      break;
     case 72: //Release time
       releaseRate = -(0.128/(float)(i+1));
-    break;
+      break;
 
     case 15:{
         float detune= ((float)(i)/10160.0);
         detuneUp = 1.0 + detune;
         detuneDown = 1.0 - detune;
       }
-    break;
+      break;
 
     case 20:
       fm_freq_cc[0] = i;
       fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
-    break;
+      break;
     case 21:
       fm_freq_cc[1] = i;
       fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
-    break;
+      break;
     case 22:
       {
         // float factor = fm_depth;
@@ -481,10 +476,10 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
           // oscillators[j].fm_amplitude *= factor;
         // }
       }
-    break;
+      break;
     case 23:
       fm_decay=1.0 - ((float)(i*i)/25400000);
-    break;
+      break;
     case 24:
       {
         for (int i=POLYPHONY;i--;) oscillators[i].alive=0;
@@ -565,29 +560,18 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
 
         }
       }
-    break;
+      break;
 
     case 25:
       targetWave = i;
-    break;
+      break;
     case 26:
-      //aa = i;
       waveParam = i;
       targetWave&=0x7F;
-    break;
+      break;
     case 27:
       arpegSpeed=(i>>2);
-
-      
-
-
-
-
-
-      
-    break;
-
-
+      break;
 
 
     case 64: //sustain pedal
@@ -625,7 +609,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
           }
         }
       }
-    break;
+      break;
 
     case 101: channels[chan].RPNstack[0]=i; break;
     case 100: channels[chan].RPNstack[1]=i; break;
@@ -638,7 +622,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
           channels[chan].pbSensitivity = i; // should this be limited to 24 ?
         }
       }
-    break;
+      break;
 
     case 3: // Per-channel tuning
       if (i == 0) {
@@ -648,7 +632,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
           channels[chan].pbSensitivity=1;
           channels[chan].tuning = &fTuningTables[i-1][0];
       }
-    break;
+      break;
 
     case 9: // All channels tuning
       if (i == 0) {
@@ -662,7 +646,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
           channels[j].tuning = &fTuningTables[j][0];
         }
       }
-    break;
+      break;
   }
 }
 
@@ -974,19 +958,19 @@ void USART1_IRQHandler(void) {
             if (bytetwo >= channels[chan].pbSensitivity && bytetwo <= 127-channels[chan].pbSensitivity)
               noteOn(bytetwo, i, chan);
           }
-        break;
+          break;
 
         case 0x80: //Note off
           noteOff(bytetwo, chan);
-        break;
+          break;
 
         case 0xE0: //Pitch bend
           channels[chan].bend = channels[chan].pbSensitivity * (((i<<7) + bytetwo) - 0x2000);
-        break;
+          break;
 
         case 0xB0: // Continuous controller
           parameterChange(chan, bytetwo, i);
-        break;
+          break;
       }
 
       bytenumber =1; //running status
