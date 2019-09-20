@@ -256,43 +256,33 @@ void setWaveform(uint8_t id, uint8_t param) {
   case wave_Hammondish:
 
     for (uint16_t i=0;i<8192;i++) {
-      mainLut[i]=sinLut[i];
+      mainLut[i]=sinLut[i]*0.5;
     }
-    #define addSine(m) for (uint16_t i=0;i<8192;i++) { mainLut[i]+= sinLut[(i*m)&8191]; }
+    #define addSine(m, n) for (uint16_t i=0;i<8192;i++) { mainLut[i]+= sinLut[(i*m)&8191] *n; }
 
-    if (param&(1<<0)) addSine(2)
-    if (param&(1<<1)) addSine(3)
-    if (param&(1<<2)) addSine(4)
-    if (param&(1<<3)) addSine(6)
-    if (param&(1<<4)) addSine(8)
-    if (param&(1<<5)) addSine(10)
-    if (param&(1<<6)) addSine(12)
-
-    for (uint16_t i=0;i<8192;i++) {
-      mainLut[i]*=0.25;
-    }
+    if (param&(1<<0)) addSine(2, 0.25)
+    if (param&(1<<1)) addSine(3, 0.25)
+    if (param&(1<<2)) addSine(4, 0.25)
+    if (param&(1<<3)) addSine(6, 0.25)
+    if (param&(1<<4)) addSine(8, 0.25)
+    if (param&(1<<5)) addSine(10, 0.25)
+    if (param&(1<<6)) addSine(12, 0.25)
 
     goto skipAntiAliasing;
 
   case wave_Hammondish2:
 
     for (uint16_t i=0;i<8192;i++) {
-      mainLut[i]=sinLut[i];
+      mainLut[i]=sinLut[i]*0.5;
     }
-    addSine(1);
-    addSine(1);
 
-    if (param&(1<<0)) {addSine(2); addSine(2); addSine(2);}
-    if (param&(1<<1)) {addSine(3); addSine(3); }
-    if (param&(1<<2)) {addSine(4); addSine(4); }
-    if (param&(1<<3)) addSine(6)
-    if (param&(1<<4)) addSine(8)
-    if (param&(1<<5)) addSine(10)
-    if (param&(1<<6)) addSine(12)
-
-    for (uint16_t i=0;i<8192;i++) {
-      mainLut[i]*=0.125;
-    }
+    if (param&(1<<0)) addSine(2, 0.25)
+    if (param&(1<<1)) addSine(3, 0.25)
+    if (param&(1<<2)) addSine(4, 0.2)
+    if (param&(1<<3)) addSine(6, 0.15)
+    if (param&(1<<4)) addSine(8, 0.15)
+    if (param&(1<<5)) addSine(10, 0.1)
+    if (param&(1<<6)) addSine(12, 0.1)
 
     goto skipAntiAliasing;
 
