@@ -314,18 +314,24 @@ void setWaveform(uint8_t id, uint8_t param) {
     break;
 
   case wave_HalfSine:
-    for (uint16_t i=0;i<4096;i++) {
-      mainLut[i]=sinLut[i];
+    {
+      float normalize = -0.3183098705884235; //2/2pi
+      for (uint16_t i=0;i<4096;i++) {
+        mainLut[i]=normalize + sinLut[i];
+      }
+      for (uint16_t i=4096;i<8192;i++) {
+        mainLut[i]=normalize;
+      }
+      break;
     }
-    for (uint16_t i=4096;i<8192;i++) {
-      mainLut[i]=0;
-    }
-    break;
   case wave_AbsSine:
-    for (uint16_t i=0;i<8192;i++) {
-      mainLut[i]= sinLut[i] > 0 ? sinLut[i] : -sinLut[i];
+    {
+      float normalize = -0.6366197723675814; //4/2pi
+      for (uint16_t i=0;i<8192;i++) {
+        mainLut[i]= (sinLut[i] > 0 ? sinLut[i] : -sinLut[i]) +normalize;
+      }
+      break;
     }
-    break;
   case wave_HardSquare:
     for (uint16_t i=0;i<4096;i++) {
       mainLut[i]=0.5;
@@ -399,41 +405,48 @@ void setWaveform(uint8_t id, uint8_t param) {
     }
     break;
   case wave_AbsSineEven:
-    for (uint16_t i=0;i<2048;i++) {
-      mainLut[i]= sinLut[i*2];
+    {
+      float normalize = -0.3183098705884235; //2/2pi
+      for (uint16_t i=0;i<2048;i++) {
+        mainLut[i]= sinLut[i*2] +normalize;
+      }
+      for (uint16_t i=2048;i<4096;i++) {
+        mainLut[i]= sinLut[i*2-4096] +normalize;
+      }
+      for (uint16_t i=4096;i<8192;i++) {
+        mainLut[i]= normalize;
+      }
+      break;
     }
-    for (uint16_t i=2048;i<4096;i++) {
-      mainLut[i]= sinLut[i*2-4096];
-    }
-    for (uint16_t i=4096;i<8192;i++) {
-      mainLut[i]= 0.0;
-    }
-    break;
   case wave_HardPulse:
-    for (uint16_t i=0;i<(param+1)*32;i++) {
-      mainLut[i]=0.5;
+    {
+      float normalize = -(param+1)/256.0 + 0.5;
+      for (uint16_t i=0;i<(param+1)*32;i++) {
+        mainLut[i]=normalize + 0.5;
+      }
+      for (uint16_t i=(param+1)*32;i<8192;i++) {
+        mainLut[i]=normalize - 0.5;
+      }
+      break;
     }
-    for (uint16_t i=(param+1)*32;i<8192;i++) {
-      mainLut[i]=-0.5;
-    }
-    break;
   case wave_SoftPulse:
-    { 
+    {
+      float normalize = -(param+1)/256.0 + 0.5; //assumption
       uint16_t i=0, duty=(param+1)*28 +512;
       while (i<512) {
-        mainLut[i]= (i/512.0) -0.5;
+        mainLut[i]= (i/512.0) -0.5 +normalize;
         i++;
       }
       while (i<duty) {
-        mainLut[i]=0.5;
+        mainLut[i]=0.5 +normalize;
         i++;
       }
       while (i<duty+512) {
-        mainLut[i]= ((512-i+duty)/512.0) -0.5;
+        mainLut[i]= ((512-i+duty)/512.0) -0.5 +normalize;
         i++;
       }
       while (i<8192) {
-        mainLut[i]=-0.5;
+        mainLut[i]=-0.5 +normalize;
         i++;
       }
     }
