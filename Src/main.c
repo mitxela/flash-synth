@@ -265,6 +265,7 @@ void setWaveform(uint8_t id, uint8_t param) {
   if (id&0x80) return;
 
   // %8192 == &8191
+  #define waveCheck() if (id!=targetWave || param!=waveParam) return;
 
   switch (id) {
   default:
@@ -279,7 +280,8 @@ void setWaveform(uint8_t id, uint8_t param) {
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]=sinLut[i]*0.5;
     }
-    #define addSine(m, n) for (uint16_t i=0;i<8192;i++) { mainLut[i]+= sinLut[(i*m)&8191] *n; }
+    #define addSine(m, n) for (uint16_t i=0;i<8192;i++) { mainLut[i]+= sinLut[(i*m)&8191] *n; } \
+    waveCheck()
 
     if (param&(1<<0)) addSine(2, 0.25)
     if (param&(1<<1)) addSine(3, 0.25)
@@ -319,6 +321,7 @@ void setWaveform(uint8_t id, uint8_t param) {
       for (uint16_t i=0;i<4096;i++) {
         mainLut[i]=normalize + sinLut[i];
       }
+      waveCheck()
       for (uint16_t i=4096;i<8192;i++) {
         mainLut[i]=normalize;
       }
@@ -336,6 +339,7 @@ void setWaveform(uint8_t id, uint8_t param) {
     for (uint16_t i=0;i<4096;i++) {
       mainLut[i]=0.5;
     }
+    waveCheck()
     for (uint16_t i=4096;i<8192;i++) {
       mainLut[i]=-0.5;
     }
@@ -347,14 +351,17 @@ void setWaveform(uint8_t id, uint8_t param) {
         mainLut[i]= (i/512.0) -0.5;
         i++;
       }
+      waveCheck()
       while (i<4096) {
         mainLut[i]=0.5;
         i++;
       }
+      waveCheck()
       while (i<4096+512) {
         mainLut[i]= ((512-i+4096)/512.0) -0.5;
         i++;
       }
+      waveCheck()
       while (i<8192) {
         mainLut[i]=-0.5;
         i++;
@@ -380,6 +387,7 @@ void setWaveform(uint8_t id, uint8_t param) {
       for (uint16_t i=0;i<512;i++) {
         mainLut[i]= j-=1.0/512.0;
       }
+      waveCheck()
       for (uint16_t i=512;i<8192;i++) {
         mainLut[i]= j+=1.0/(8192.0-512);
       }
@@ -391,6 +399,7 @@ void setWaveform(uint8_t id, uint8_t param) {
       for (uint16_t i=0;i<duty;i++) {
         mainLut[i]= j-=downslope;
       }
+      waveCheck()
       for (uint16_t i=duty;i<8192;i++) {
         mainLut[i]= j+=upslope;
       }
@@ -400,6 +409,7 @@ void setWaveform(uint8_t id, uint8_t param) {
     for (uint16_t i=0;i<4096;i++) {
       mainLut[i]= sinLut[i*2];
     }
+    waveCheck()
     for (uint16_t i=4096;i<8192;i++) {
       mainLut[i]= 0.0;
     }
@@ -410,9 +420,11 @@ void setWaveform(uint8_t id, uint8_t param) {
       for (uint16_t i=0;i<2048;i++) {
         mainLut[i]= sinLut[i*2] +normalize;
       }
+      waveCheck()
       for (uint16_t i=2048;i<4096;i++) {
         mainLut[i]= sinLut[i*2-4096] +normalize;
       }
+      waveCheck()
       for (uint16_t i=4096;i<8192;i++) {
         mainLut[i]= normalize;
       }
@@ -424,6 +436,7 @@ void setWaveform(uint8_t id, uint8_t param) {
       for (uint16_t i=0;i<(param+1)*32;i++) {
         mainLut[i]=normalize + 0.5;
       }
+      waveCheck()
       for (uint16_t i=(param+1)*32;i<8192;i++) {
         mainLut[i]=normalize - 0.5;
       }
@@ -437,14 +450,17 @@ void setWaveform(uint8_t id, uint8_t param) {
         mainLut[i]= (i/512.0) -0.5 +normalize;
         i++;
       }
+      waveCheck()
       while (i<duty) {
         mainLut[i]=0.5 +normalize;
         i++;
       }
+      waveCheck()
       while (i<duty+512) {
         mainLut[i]= ((512-i+duty)/512.0) -0.5 +normalize;
         i++;
       }
+      waveCheck()
       while (i<8192) {
         mainLut[i]=-0.5 +normalize;
         i++;
@@ -454,7 +470,9 @@ void setWaveform(uint8_t id, uint8_t param) {
 
 
   }
+  waveCheck()
   antialias((aa<<3)+8);
+  waveCheck()
   antialias((aa<<3)+8);
 
 skipAntiAliasing:
