@@ -675,6 +675,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
 void loadPatch(uint8_t p){
   // Link between byte position in the patch file and CC number
   const uint8_t paramMap[64] = {
+    cc_modulation, // Must be first as it's loaded per-channel
     cc_algo,
     cc_fm_freq,
     cc_fm_freq_fine,
@@ -689,7 +690,10 @@ void loadPatch(uint8_t p){
     cc_detune, 
     cc_arpeg_speed
   };
-  for (uint8_t i=0;i<64;i++)
+  for (uint8_t i=0;i<16;i++)
+    parameterChange(i, cc_modulation, bPatches[p][0]);
+
+  for (uint8_t i=1;i<64;i++)
     parameterChange(0, paramMap[i], bPatches[p][i]);
 }
 
