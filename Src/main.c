@@ -28,8 +28,6 @@ static void Error_Handler(void);
 
 #define BUFFERSIZE 256
 #define POLYPHONY 16
-// To be absolutely sure it isn't going to clip, wave amplitude should be less than 2048/polyphony = 128...
-#define WAVE_AMPLITUDE 128
 
 #define DEFAULT_PB_RANGE 2
 
@@ -50,6 +48,8 @@ float releaseRate = -0.0025;
 float attackRate = 0.25;
 float fm_attack = 2.0;
 
+float outputGain = 1.0;
+
 uint8_t waveParam =0x0F;
 uint8_t aa = 16;
 
@@ -67,7 +67,6 @@ struct channel {
 struct oscillator {
   uint8_t channel;
   uint8_t notenumber;
-  uint8_t velocity;
 
   uint8_t stolen;
   uint8_t stolenChannel;
@@ -79,6 +78,8 @@ struct oscillator {
   float fm_depth_cache;
   float lfo_phase;
   uint32_t starttime;
+
+  uint16_t velocity;
   unsigned alive:1;
   unsigned released:1;
   unsigned sustained:1;
@@ -192,6 +193,8 @@ enum {
   cc_waveform = 25,
   cc_wave_param = 26,
   cc_arpeg_speed = 27,
+
+  cc_output_gain = 88,
 
   cc_per_channel_tuning = 3,
   cc_all_channels_tuning = 9
@@ -481,10 +484,12 @@ skipAntiAliasing:
 }
 
 void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
-  static uint8_t fm_freq_cc[] = {0,0}, fm_attack_cc=0;
+  static uint8_t fm_freq_cc[] = {0,0}, fm_attack_cc=0, attackrate_cc=0, releaserate_cc=0;
 
   #define set_fm_freq() fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
   #define set_fm_attack() fm_attack = (fm_depth * 0.001/((float)fm_attack_cc+0.5));
+  #define set_attack_rate() attackRate = (0.128/(float)(attackrate_cc+1)) * outputGain;
+  #define set_release_rate() releaseRate = -(0.128/(float)(releaserate_cc+1)) * outputGain;
 
   switch (cc) {
     case cc_modulation:
@@ -500,10 +505,18 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       break;
 
     case cc_attack_rate:
-      attackRate = (0.128/(float)(i+1));
+      attackrate_cc=i;
+      set_attack_rate()
       break;
     case cc_release_rate:
-      releaseRate = -(0.128/(float)(i+1));
+      releaserate_cc=i;
+      set_release_rate()
+      break;
+
+    case cc_output_gain:
+      outputGain = i*0.125;
+      set_attack_rate()
+      set_release_rate()
       break;
 
     case cc_detune:{
@@ -625,6 +638,8 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
     case cc_arpeg_speed:
       arpegSpeed=(i>>2);
       break;
+
+
 
 
     case cc_sustain: 
@@ -772,7 +787,7 @@ void noteOnFullPoly(uint8_t n, uint8_t vel, uint8_t chan) {
   oscillators[i].starttime = timestamp++;
   oscillators[i].released = 0;
   oscillators[i].sustained = 0;
-  oscillators[i].velocity=vel;
+  oscillators[i].velocity=vel * outputGain;
 
   
 
@@ -832,7 +847,7 @@ void noteOnDualOsc(uint8_t n, uint8_t vel, uint8_t chan) {
   oscillators[i].starttime = timestamp++;
   oscillators[i].released = 0;
   oscillators[i].sustained = 0;
-  oscillators[i].velocity=vel;
+  oscillators[i].velocity=vel * outputGain;
 
 
 
@@ -873,7 +888,7 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
       monoNoteStack[i] = n;
       monoNoteNow=i;
       oscillators[0].notenumber=n;
-      oscillators[0].velocity=vel;
+      oscillators[0].velocity=vel * outputGain;
       oscillators[0].channel=chan;
       return;
     }
@@ -888,7 +903,7 @@ void noteOnMonophonic(uint8_t n, uint8_t vel, uint8_t chan) {
   monoNoteTimer=0;
 
   oscillators[0].notenumber=n;
-  oscillators[0].velocity=vel;
+  oscillators[0].velocity=vel * outputGain;
   oscillators[0].channel=chan;
   oscillators[0].released=0;
 
@@ -958,7 +973,7 @@ void noteOnPoly4(uint8_t n, uint8_t vel, uint8_t chan) {
   oscillators[i].starttime = timestamp++;
   oscillators[i].released = 0;
   oscillators[i].sustained = 0;
-  oscillators[i].velocity=vel;
+  oscillators[i].velocity=vel * outputGain;
 }
 
 void noteOffPoly4(uint8_t n, uint8_t chan) {
