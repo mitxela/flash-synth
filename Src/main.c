@@ -155,6 +155,8 @@ enum {
   wave_HardSquare,
   wave_SoftSquare,
   wave_FifthSquare,
+  wave_OctaveSquare,
+  wave_FifthSaw,
   wave_HardSaw,
   wave_SoftSaw,
   wave_VarySaw,
@@ -262,8 +264,6 @@ void antialias(unsigned int radius){
 
 }
 
-
-// TODO: normalize waveforms
 void setWaveform(uint8_t id, uint8_t param) {
   if (id&0x80) return;
 
@@ -374,6 +374,21 @@ void setWaveform(uint8_t id, uint8_t param) {
   case wave_FifthSquare:
     for (uint16_t i=0;i<8192;i++) {
       mainLut[i]= (((i*2)&8191) >4192? 0.25:-0.25) + (((i*3)&8191) >4192? 0.25:-0.25);
+    }
+    break;
+  case wave_OctaveSquare:
+    for (uint16_t i=0;i<8192;i++) {
+      mainLut[i]= (((i)&8191) >4192? 0.25:-0.25) + (((i*2)&8191) >4192? 0.25:-0.25);
+    }
+    break;
+  case wave_FifthSaw:
+    {
+      uint16_t i; float j;
+      for (j=-0.25, i=0;   i<4096;i++) { mainLut[i]= j+=1.0/8192.0; }
+      for (j=-0.25, i=4096;i<8192;i++) { mainLut[i]= j+=1.0/8192.0; }
+      for (j=-0.25, i=0;   i<2730;i++) { mainLut[i]+=j+=0.5/2730.6; }
+      for (j=-0.25, i=2730;i<5461;i++) { mainLut[i]+=j+=0.5/2730.6; }
+      for (j=-0.25, i=5461;i<8192;i++) { mainLut[i]+=j+=0.5/2730.6; }
     }
     break;
   case wave_HardSaw:
@@ -734,7 +749,8 @@ void loadPatch(uint8_t p){
     cc_wave_param,
     cc_lfo_freq,
     cc_detune, 
-    cc_arpeg_speed
+    cc_arpeg_speed,
+    cc_portamento
   };
   for (uint8_t i=0;i<16;i++)
     parameterChange(i, cc_modulation, bPatches[p][0]);
