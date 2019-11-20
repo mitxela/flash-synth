@@ -207,6 +207,10 @@ enum {
   x += y; \
   if (x >8192.0f) x-=8192.0f;
 
+#define phase_incr_safe(x, y) \
+  x += y; \
+  while (x >8192.0f) x-=8192.0f;
+
 #define phase_wrap(x) \
   while ( x<0.0f ) x+=8192.0f; \
   while ( x>=8192.0f ) x-=8192.0f;
@@ -1200,7 +1204,7 @@ void oscAlgo1(struct oscillator* osc, uint16_t* buf){
 
     osc->amplitude += ampDiff;
 
-    phase_incr(osc->fm_phase, fm_freq*f)
+    phase_incr_safe(osc->fm_phase, fm_freq*f)
 
     osc->fm_amplitude += preAmpDiff;
 
@@ -1255,8 +1259,8 @@ void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* b
 
     osc->amplitude += ampDiff;
 
-    phase_incr(osc->fm_phase, fm_freq*fl)
-    phase_incr(osc2->fm_phase,fm_freq*fr)
+    phase_incr_safe(osc->fm_phase, fm_freq*fl)
+    phase_incr_safe(osc2->fm_phase,fm_freq*fr)
 
     osc->fm_amplitude += preAmpDiff;
 
@@ -1326,7 +1330,7 @@ void oscAlgo1Quad(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf
 
     osc->amplitude += ampDiff;
 
-    phase_incr(osc->fm_phase, fm_freq*fr)
+    phase_incr_safe(osc->fm_phase, fm_freq*fr)
 
     osc->fm_amplitude += preAmpDiff;
 
@@ -1438,8 +1442,8 @@ void algoMonophonic1(float f, uint16_t* buf, uint16_t* buf2) {
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
     osc->amplitude += ampDiff;
 
-    phase_incr(osc->fm_phase, fm_freq*fl)
-    phase_incr(osc2->fm_phase,fm_freq*fr)
+    phase_incr_safe(osc->fm_phase, fm_freq*fl)
+    phase_incr_safe(osc2->fm_phase,fm_freq*fr)
 
     osc->fm_amplitude += preAmpDiff;
 
