@@ -533,7 +533,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       break;
 
     case cc_output_gain:
-      outputGain = i*0.125;
+      outputGain = i==0 ? 1.0 : i*0.125;
       set_attack_rate()
       set_release_rate()
       break;
@@ -754,7 +754,8 @@ void loadPatch(uint8_t p){
     cc_lfo_freq,
     cc_detune, 
     cc_arpeg_speed,
-    cc_portamento
+    cc_portamento,
+    cc_output_gain
   };
   for (uint8_t i=0;i<16;i++)
     parameterChange(i, cc_modulation, bPatches[p][0]);
