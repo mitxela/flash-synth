@@ -1030,10 +1030,11 @@ void USART1_IRQHandler(void) {
 
   uint8_t i = LL_USART_ReceiveData8(USART1);
 
+  if (i>=0xF8) return; //system real-time
+
   if (i & 0x80) {
     status = i;
     bytenumber = 1;
-
   } else {
     uint8_t chan = status&0x0F;
 
