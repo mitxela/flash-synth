@@ -167,7 +167,7 @@ $(BUILD_DIR)/$(TARGET).elf: $(OBJECTS)
 #$(BUILD_DIR)/%.hex: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
 #	$(HEX) $< $@
 
-$(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf | $(BUILD_DIR)
+$(BUILD_DIR)/%.bin: $(BUILD_DIR)/%.elf version.sh | $(BUILD_DIR) 
 	$(BIN) $< $@
 	./version.sh $@
 
