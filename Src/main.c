@@ -727,6 +727,11 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
           channels[j].pbSensitivity=DEFAULT_PB_RANGE;
           channels[j].tuning = &fEqualLookup[0];
         }
+      } else if (i<=16){
+        for (int j=0;j<16;j++) {
+          channels[j].pbSensitivity=1;
+          channels[j].tuning = &fTuningTables[i-1][0];
+        }
       } else {
         for (int j=0;j<16;j++) {
           channels[j].pbSensitivity=1;
@@ -1030,6 +1035,7 @@ void USART1_IRQHandler(void) {
 
   uint8_t i = LL_USART_ReceiveData8(USART1);
 
+  if (i==0xFF) NVIC_SystemReset();
   if (i>=0xF8) return; //system real-time
 
   if (i & 0x80) {
@@ -1678,8 +1684,8 @@ void USART1_Init(void) {
   if (HAL_UART_Init(&huart1) != HAL_OK)
     Error_Handler();
 
-  NVIC_SetPriority(USART1_IRQn, 0);
-  NVIC_EnableIRQ(USART1_IRQn);
+  //NVIC_SetPriority(USART1_IRQn, 0);
+  //NVIC_EnableIRQ(USART1_IRQn);
   LL_USART_Enable(USART1);
   LL_USART_EnableIT_RXNE(USART1);
 
