@@ -198,6 +198,9 @@ enum {
 
   cc_output_gain = 88,
 
+  cc_all_sound_off = 120,
+  cc_all_notes_off = 123,
+
   cc_per_channel_tuning = 3,
   cc_all_channels_tuning = 9
   // 6, 38, 100, 101 RPN stuff
@@ -697,6 +700,16 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
         }
       }
       break;
+
+
+    case cc_all_sound_off:
+    case cc_all_notes_off: {
+      for (int i=POLYPHONY;i--;) oscillators[i].alive=0;
+      oscillators[0].released=1;
+      oscillators[0].amplitude=0;
+      monoNoteNow=monoNoteEnd=monoNoteReleaseEnd=0;
+      monoNoteTimer=254;
+    } break;
 
     case 101: channels[chan].RPNstack[0]=i; break;
     case 100: channels[chan].RPNstack[1]=i; break;
