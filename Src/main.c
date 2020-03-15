@@ -1068,6 +1068,7 @@ void USART1_IRQHandler(void) {
 
         case 0xC0: //Program Change
           loadPatch(i);
+          status = 0;
           break;
 
         default:
