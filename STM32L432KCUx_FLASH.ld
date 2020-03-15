@@ -42,7 +42,9 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 MEMORY
 {
 RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 64K
-FLASH (rx)     : ORIGIN = 0x8000000, LENGTH = 240K
+FLASH (rx)     : ORIGIN = 0x8000000, LENGTH = 239K
+CONFIG (rx)    : ORIGIN = 0x803bc00, LENGTH = 512
+TABLENAMES (rx): ORIGIN = 0x803be00, LENGTH = 512
 PATCHES (rx)   : ORIGIN = 0x803c000, LENGTH = 8K
 TABLES (rx)    : ORIGIN = 0x803e000, LENGTH = 8K
 }
@@ -169,6 +171,15 @@ SECTIONS
     . = ALIGN(8);
   } >RAM
 
+  .config :
+  {
+    KEEP (*(.Config*));
+  } >CONFIG
+
+  .table_names :
+  {
+    KEEP (*(.Table_Names*));
+  } >TABLENAMES
 
   .patches :
   {

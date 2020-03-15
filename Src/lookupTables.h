@@ -1,3 +1,24 @@
+
+__attribute__((section(".Table_Names"))) const char cTuningTableNames[16][32] = {
+"5-Olympos.hz",
+"7-Boethius.hz",
+"9-AlFarabi.hz",
+"10-Portuguese.hz",
+"12-7LimitJI.hz",
+"12-Meantone.hz",
+"12-Slendro+Pelog.hz",
+"15-TonesFrom22ET.hz",
+"19-5LimitJI.hz",
+"19-ET.hz",
+"24-AlFaribi10thC.hz",
+"31-ET.hz",
+"43-Chromelodeon.hz",
+"53-ET.hz",
+"72-ET.hz",
+"96-ET.hz"
+};
+
+
 __attribute__((section(".Tuning_Tables"))) const float fTuningTables[16][128] = {
 
 // 5-Olympos.hz

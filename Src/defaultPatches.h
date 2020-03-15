@@ -1,4 +1,16 @@
 
+__attribute__((section(".Config"))) const struct {
+
+  uint8_t channel;
+  float somethingelse;
+
+} config = {
+
+  .channel = 255,
+  .somethingelse = 0.0
+
+};
+
 __attribute__((section(".Patches"))) const uint8_t bPatches[128][64] = {
 
 {0,0,8,0,64,0,32,0,64,0,31,64,64,64,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,'E','l','e','c','t','r','i','c',' ','P','i','a','n','o',' ','1'},
