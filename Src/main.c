@@ -1056,7 +1056,7 @@ void USART1_IRQHandler(void) {
     bytenumber = 1;
   } else {
     uint8_t chan = status&0x0F;
-    if (config.channel!=255 && config.channel != chan) return;
+    if (synthConfig.channel!=255 && synthConfig.channel != chan) return;
 
     if (bytenumber == 1) { // Check two-byte messages
       switch (status&0xF0) {

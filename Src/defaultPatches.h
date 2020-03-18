@@ -1,10 +1,10 @@
 
-__attribute__((section(".Config"))) const struct {
+__attribute__((section(".Config"))) volatile struct {
 
   uint8_t channel;
   float somethingelse;
 
-} config = {
+} synthConfig = {
 
   .channel = 255,
   .somethingelse = 0.0
