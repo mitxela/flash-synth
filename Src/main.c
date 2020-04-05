@@ -249,24 +249,18 @@ void setStereo(int stereo){
 void antialias(unsigned int radius){
 // Must be symmetric
 
-  float b[1024]={};
   float sum = 0;
   float scale = 1.0/((float)radius);
-  unsigned int idx = 0;
-  
-  for (int i=0; i<radius; i++) {
-    b[i] = mainLut[8192 - radius + i];
+
+  for (int i=0; i<radius;i++) {
+    sum+=mainLut[i];
   }
 
   for (int i=0;i<8192;i++) {
-    sum=0;
-    for (int j=0; j<radius; j++) {
-      sum+=b[j];
-    }
-    b[idx++] = mainLut[i];
-    mainLut[i] = sum*scale;
-    
-    if (idx==radius) idx=0;
+    float t = sum*scale;
+    sum-=mainLut[i];
+    sum+=mainLut[ (i+radius)%8192 ];
+    mainLut[i] = t;
   }
 
 }
