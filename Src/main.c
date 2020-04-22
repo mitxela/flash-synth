@@ -51,7 +51,6 @@ float fm_attack = 2.0;
 float outputGain = 1.0;
 
 uint8_t waveParam =0x0F;
-uint8_t aa = 16;
 
 struct channel {
   int32_t bend;
@@ -163,7 +162,9 @@ enum {
   wave_SineEven,
   wave_AbsSineEven,
   wave_HardPulse,
-  wave_SoftPulse
+  wave_SoftPulse,
+  wave_HardSyncSine,
+  wave_HardSyncSaw
 };
 
 enum {
@@ -486,13 +487,36 @@ void setWaveform(uint8_t id, uint8_t param) {
       }
     }
     break;
+  case wave_HardSyncSine:
+    {
+      float step = (float)param*(1.0/16), j=0.0;
 
-
+      for (uint16_t i=0;i<8192;i++) {
+        mainLut[i]=sinLut[ (uint16_t)j ];
+        j+=step;
+        if (j>=8192.0) j-=8192.0;
+      }
+    }
+    break;
+  case wave_HardSyncSaw:
+    {
+      float step = (float)param*(1.0/16/8192.0);
+      float j=-0.5;
+      for (uint16_t i=0;i<8192;i++) {
+        mainLut[i]= j;
+        j+=step;
+        if (j>=0.5) j-=1.0;
+      }
+    }
+    waveCheck()
+    antialias(512);
+    antialias(512);
+    break;
   }
   waveCheck()
-  antialias((aa<<3)+8);
+  antialias(136);
   waveCheck()
-  antialias((aa<<3)+8);
+  antialias(136);
 
 skipAntiAliasing:
 
