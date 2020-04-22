@@ -116,6 +116,7 @@ doOscStereo_t *doOscillatorStereo = &oscAlgo1Stereo;
 typedef void monophonicAlgo_t(float f, uint16_t* buf, uint16_t* buf2);
 monophonicAlgo_t algoMonophonic1;
 monophonicAlgo_t algoMonophonic2;
+monophonicAlgo_t algoMonophonic3;
 monophonicAlgo_t *monophonicAlgo = &algoMonophonic2;
 
 typedef void doOscPoly4_t(struct oscillator* osc, struct oscillator* osc2, struct oscillator* osc3, struct oscillator* osc4, uint16_t* buf, uint16_t* buf2);
@@ -175,7 +176,8 @@ enum {
   algo_2_poly,
   algo_2_stereo,
   algo_2_mono,
-  algo_2_quad
+  algo_2_quad,
+  algo_3_mono
   //algo_1_poly4
 };
 
@@ -635,6 +637,14 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
 
           case algo_2_mono:
             monophonicAlgo = &algoMonophonic2;
+            generateIntoBuffer = &generateIntoBufferMonophonic;
+            noteOn = &noteOnMonophonic;
+            noteOff = &noteOffMonophonic;
+            setStereo(1);
+            break;
+
+          case algo_3_mono:
+            monophonicAlgo = &algoMonophonic3;
             generateIntoBuffer = &generateIntoBufferMonophonic;
             noteOn = &noteOnMonophonic;
             noteOff = &noteOffMonophonic;
@@ -1525,6 +1535,62 @@ void algoMonophonic2(float f, uint16_t* buf, uint16_t* buf2) {
 
     buf[i]  = 2048+sinLut[(int)( osc->fm_phase)] * osc->amplitude;
     buf2[i] = 2048+sinLut[(int)(osc2->fm_phase)] * osc->amplitude;
+  }
+
+}
+
+
+
+float polyBlep(float t,float dt){
+    if (t < dt) {
+      t /= dt;
+      return t+t - t*t - 1.0;
+    } else if (t > 8192.0 - dt) {
+      t = (t - 8192.0) / (dt);
+      return t*t + t+t + 1.0;
+    }
+
+    return 0.0;
+}
+
+void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
+
+  struct oscillator* osc= &oscillators[0];
+
+  //float preAmpDiff = intEnvelope(osc);
+//  float ampDiff = envelope(osc);
+if (osc->released) osc->amplitude=0;
+else osc->amplitude=osc->velocity;
+
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+//    osc->amplitude += ampDiff;
+
+    phase_incr(osc->phase, f)
+
+float x ;
+
+// Saw
+//    x = osc->phase * (2.0/8192.0) - 1.0 -= polyBlep(osc->phase, f);
+
+
+// Square
+float halfphase = osc->phase+4096.0;
+if (halfphase>=8192.0) halfphase-=8192.0;
+
+if (osc->phase>4096.0) {
+  x = -1.0 +polyBlep(osc->phase, f) - polyBlep(halfphase, f);
+} else {
+  x =  1.0 +polyBlep(osc->phase, f) - polyBlep(halfphase, f);
+}
+
+
+
+    //osc->fm_amplitude += preAmpDiff;
+    // phase_wrap(osc->fm_phase)
+    // phase_wrap(osc2->fm_phase)
+
+    buf2[i] = buf[i]  = 2048 + x * osc->amplitude;
   }
 
 }
