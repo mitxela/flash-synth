@@ -1634,35 +1634,34 @@ if (osc->released) {osc->amplitude=0;osc->alive=0;}
 else osc->amplitude=osc->velocity;
 
   float duty=(waveParam+1)*28 +512;
-  //float halfphase = osc->phase+8192.0-duty;
-  //if (halfphase>=8192.0) halfphase-=8192.0;
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
     //osc->amplitude += ampDiff;
     phase_incr(osc->phase,f)
-    //phase_incr(halfphase,f)
 
     float x,halfphase;
 
     if (osc->phase>duty) {
       x = -1.0;
       halfphase=osc->phase-duty;
+
     } else {
       x =  1.0;
       halfphase=osc->phase-duty+8192;
+
+      if (osc->phase < f) {
+        x+= bleptable[ (int)(osc->phase*idt) ]-1;
+      } else if (halfphase > 8192.0 - f) {
+        x-= 1-bleptable[ (int)((8192.0-halfphase) * idt) ];
+      }
+
     }
 
-    if (osc->phase < f) {
-      x+= bleptable[ (int)(osc->phase*idt) ]-1;
-    } else if (osc->phase > 8192.0 - f) {
+    if (osc->phase > 8192.0 - f) {
       x+= 1-bleptable[ (int)((8192.0-osc->phase) * idt) ];
-    }
-
-    else if (halfphase < f) {
+    } else if (halfphase < f) {
       x-= bleptable[ (int)(halfphase*idt) ]-1;
-    } else if (halfphase > 8192.0 - f) {
-      x-= 1-bleptable[ (int)((8192.0-halfphase) * idt) ];
-    }
+    } 
 
     buf[i] += x * osc->amplitude;
 
