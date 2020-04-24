@@ -83,6 +83,7 @@ struct oscillator {
   unsigned released:1;
   unsigned sustained:1;
   unsigned intAttack:1;
+  unsigned state:2;
 } oscillators[POLYPHONY];
 
 // TODO: unionize this with oscillator memory (if we get short of ram)
@@ -1553,33 +1554,47 @@ const float bleptable[]={0,0.0077972412109375,0.01556396484375,0.023300170898437
 
 inline float blepSquare(struct oscillator* osc, float f, float idt, float duty){
 
-    phase_incr(osc->phase,f)
+  #define threshold osc->fm_phase
+  #define output osc->fm_depth_cache
+  #define state osc->state
 
-    float x,halfphase;
+  osc->phase +=f;
 
-    if (osc->phase>duty) {
-      x = -1.0;
-      halfphase=osc->phase-duty;
+  if (osc->phase > threshold) {
 
-    } else {
-      x =  1.0;
-      halfphase=osc->phase-duty+8192;
+    switch (state) {
 
-      if (osc->phase < f) {
-        x+= bleptable[ (int)(osc->phase*idt) ]-1;
-      } else if (halfphase > 8192.0 - f) {
-        x-= 1-bleptable[ (int)((8192.0-halfphase) * idt) ];
-      }
+      case 0: // duty-f;
+        threshold=0;
+        state=1;
+        return bleptable[ (int)((duty-osc->phase)*idt) ];
+
+      case 1: //duty
+        threshold=8192.0-f;
+        state=2;
+        output=-1;
+        return -bleptable[ (int)((osc->phase-duty)*idt) ];
+
+      case 2: //8192-f
+        threshold=0;
+        state=3;
+        return -bleptable[ (int)((8192-osc->phase)*idt) ];
+
+      case 3: // 8192
+        osc->phase-=8192.0f;
+        threshold=duty-f;
+        state=0;
+        output=1.0;
+        return bleptable[ (int)(osc->phase*idt) ];
 
     }
 
-    if (osc->phase > 8192.0 - f) {
-      x+= 1-bleptable[ (int)((8192.0-osc->phase) * idt) ];
-    } else if (halfphase < f) {
-      x-= bleptable[ (int)(halfphase*idt) ]-1;
-    }
+  }
+  return output;
 
-  return x;
+  #undef threshold
+  #undef output
+  #undef state
 }
 
 void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
@@ -1614,6 +1629,8 @@ void oscAlgo3(struct oscillator* osc, uint16_t* buf){
   else osc->amplitude=osc->velocity;
 
   float duty= (waveParam+1)*28 +512;
+  if (duty<2*f) duty=2*f;
+  if (f>=2048.0) return;
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
