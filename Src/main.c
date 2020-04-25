@@ -1597,20 +1597,24 @@ inline float blepSquare(struct oscillator* osc, float f, float idt, float duty){
 }
 
 inline void blepSquareRecalc(struct oscillator* osc, float f, float idt, float duty) {
-    switch (state) {
-      case 1:
-        threshold=duty;
-        break;
-      case 2:
-        threshold=8192.0-f;
-        break;
-      case 3:
-        threshold=8192.0;
-        break;
-      case 0:
-        threshold=duty-f;
-        break;
-    }
+
+  if (osc->phase<duty-f) {
+    state=0;
+    output=1.0;
+    threshold=duty-f;
+  } else if (osc->phase<duty) {
+    output=1.0;
+    state=1;
+    threshold=duty;
+  } else if (osc->phase<8192-f) {
+    output=-1.0;
+    state=2;
+    threshold=8192.0-f;
+  } else {
+    output=-1.0;
+    state=3;
+    threshold=8192.0;
+  }
 }
 
 #undef threshold
@@ -1619,10 +1623,10 @@ inline void blepSquareRecalc(struct oscillator* osc, float f, float idt, float d
 
 void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 
-  if (f>=2048.0) return;
-
   float fr = f*detuneUp;
   float fl = f*detuneDown;
+
+  if (fl>=2048.0 || fr>=2048.0) return;
 
   float idtr=256.0/fr;
   float idtl=256.0/fl;
@@ -1638,8 +1642,8 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
   if (duty<2*fr) duty=2*fr;
   if (duty<2*fl) duty=2*fl;
 
-blepSquareRecalc(osc, fl,idtl,duty);
-blepSquareRecalc(osc2,fr,idtr,duty);
+  blepSquareRecalc(osc, fl,idtl,duty);
+  blepSquareRecalc(osc2,fr,idtr,duty);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
     buf[i]  = 2048 + blepSquare(osc, fl,idtl,duty) * osc->velocity;
@@ -1659,7 +1663,7 @@ void oscAlgo3(struct oscillator* osc, uint16_t* buf){
 
   float duty= (waveParam+1)*28 +512;
   if (duty<2*f) duty=2*f;
-
+  blepSquareRecalc(osc,f,idt,duty);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
