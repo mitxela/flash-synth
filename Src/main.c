@@ -647,6 +647,8 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             break;
 
           case algo_3_mono:
+            oscillators[0].phase=8192.0;
+            oscillators[0].state=3;
             monophonicAlgo = &algoMonophonic3;
             generateIntoBuffer = &generateIntoBufferMonophonic;
             noteOn = &noteOnMonophonic;
@@ -1626,17 +1628,16 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
   float fr = f*detuneUp;
   float fl = f*detuneDown;
 
-  if (fl>=2048.0 || fr>=2048.0) return;
-
-  float idtr=256.0/fr;
-  float idtl=256.0/fl;
   struct oscillator* osc= &oscillators[0];
   struct oscillator* osc2= &oscillators[1];
 
-  if (osc->released) {
+  if (fl>=2084.0 || fr>=2048.0 || osc->released) {
     for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i] = buf2[i] = 2048;}
     return;
   }
+
+  float idtr=256.0/fr;
+  float idtl=256.0/fl;
 
   float duty=(waveParam+1)*28 +512;
   if (duty<2*fr) duty=2*fr;
@@ -1655,11 +1656,11 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 void oscAlgo3(struct oscillator* osc, uint16_t* buf){
 
   phase_incr(osc->lfo_phase, lfo_freq)
-  float f = calculateFrequency(osc), idt=256.0/f;
+  float f = calculateFrequency(osc);
   if (f>=2048.0) return;
+  float idt=256.0/f;
 
-  if (osc->released) {osc->amplitude=0;osc->alive=0;osc->phase=8192.0;osc->state=3; return;}
-  else osc->amplitude=osc->velocity;
+  if (osc->released) {osc->alive=0;osc->phase=8192.0;osc->state=3; return;}
 
   float duty= (waveParam+1)*28 +512;
   if (duty<2*f) duty=2*f;
@@ -1667,7 +1668,7 @@ void oscAlgo3(struct oscillator* osc, uint16_t* buf){
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
-    buf[i] += blepSquare(osc,f,idt,duty) * osc->amplitude;
+    buf[i] += blepSquare(osc,f,idt,duty) * osc->velocity;
 
   }
 
