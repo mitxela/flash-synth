@@ -79,11 +79,11 @@ struct oscillator {
   uint32_t starttime;
 
   uint16_t velocity;
+  uint8_t state;
   unsigned alive:1;
   unsigned released:1;
   unsigned sustained:1;
   unsigned intAttack:1;
-  unsigned state:2;
 } oscillators[POLYPHONY];
 
 // TODO: unionize this with oscillator memory (if we get short of ram)
