@@ -528,8 +528,9 @@ skipAntiAliasing:
   if (id==targetWave && param==waveParam) targetWave|=0x80;
 }
 
+uint8_t fm_freq_cc[] = {0,0};
 void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
-  static uint8_t fm_freq_cc[] = {0,0}, fm_attack_cc=0, attackrate_cc=0, releaserate_cc=0;
+  static uint8_t fm_attack_cc=0, attackrate_cc=0, releaserate_cc=0;
 
   #define set_fm_freq() fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
   #define set_fm_attack() fm_attack = (fm_depth * 0.001/((float)fm_attack_cc+0.5));
@@ -1630,14 +1631,20 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 
   struct oscillator* osc= &oscillators[0];
   struct oscillator* osc2= &oscillators[1];
+  //struct oscillator* osc3= &oscillators[7];
 
-  if (fl>=2084.0 || fr>=2048.0 || osc->released) {
+/*  if (fl>=2084.0 || fr>=2048.0 || osc->released) {
     for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i] = buf2[i] = 2048;}
     return;
   }
+*/
+  //float preAmpDiff = intEnvelope(osc);
+  float ampDiff = envelope(osc);
 
   float idtr=256.0/fr;
   float idtl=256.0/fl;
+  //f*=0.5;
+  //float idtw=256.0/f;
 
   float duty=(waveParam+1)*28 +512;
   if (duty<2*fr) duty=2*fr;
@@ -1645,10 +1652,50 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 
   blepSquareRecalc(osc, fl,idtl,duty);
   blepSquareRecalc(osc2,fr,idtr,duty);
+  //blepSquareRecalc(osc3,f, idtw,duty);
+
+  float input;
+  float res = fm_freq_cc[1]/21.167; // 0..6
+  float tcut = fm_freq_cc[0]/127.0f;// 0..1
+
+  //float track=fm_depth*0.0005;
+
+  tcut += (f - 75.093) * 0.001968503937007874;
+
+  if (tcut>1.0) tcut=1.0;
+  else if (tcut<0.0) tcut=0.0;
+
+  res-=tcut*tcut*8; if(res<0)res=0;
+
+  #define s1 oscillators[2].fm_amplitude
+  #define s2 oscillators[3].fm_amplitude
+  #define s3 oscillators[4].fm_amplitude
+  #define s4 oscillators[5].fm_amplitude
+  #define cut oscillators[6].fm_amplitude
+  #define rclip 2.0
+
+  float cdiff = (tcut-cut)/((float)BUFFERSIZE);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
-    buf[i]  = 2048 + blepSquare(osc, fl,idtl,duty) * osc->velocity;
-    buf2[i] = 2048 + blepSquare(osc2,fr,idtr,duty) * osc->velocity;
+    osc->amplitude += ampDiff;
+    cut += cdiff;
+
+    input = blepSquare(osc, fl,idtl,duty)
+          + blepSquare(osc2,fr,idtr,duty);
+          //+ blepSquare(osc3,f ,idtw,duty);
+
+
+    float resoclip = (s4-input)*res;
+    if (resoclip > rclip) resoclip = rclip; else if (resoclip<-rclip) resoclip=-rclip;
+    input = input - resoclip ;
+
+    s1 = ((input - s1) * cut) + s1;
+    s2 = ((s1 - s2) * cut) + s2;
+    s3 = ((s2 - s3) * cut) + s3;
+    s4 = ((s3 - s4) * cut) + s4;
+
+    buf2[i] = buf[i]  = 2048 +s4 * osc->amplitude;
+
   }
 
 }
