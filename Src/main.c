@@ -1629,13 +1629,13 @@ inline float blepSaw(struct oscillator* osc, float f, float idt, float incr){
     if (state==0) {
       threshold=8192.0-f;
       state=1;
-      return output+1 - bleptable[ (int)((osc->phase)*idt) ];
-    } else {
-      threshold=0;
-      state=0;
       osc->phase-=8192.0;
       output-=2.0;
-      return output+1 + bleptable[ (int)((-osc->phase)*idt) ];
+      return output+1 - bleptable[ (int)((osc->phase)*idt) ];
+    } else {
+      threshold=8192.0;
+      state=0;
+      return output-1 + bleptable[ (int)((8192.0-osc->phase)*idt) ];
     }
   }
 
@@ -1646,13 +1646,14 @@ inline void blepSawRecalc(struct oscillator* osc, float f, float idt, float incr
 
   output=osc->phase/4096.0 -1.0;
 
-  if (osc->phase<f) {
-    //state=0;
-    //threshold=0;
-  } else if (osc->phase<8192.0-f) {
+  if (osc->phase<8192.0-f) {
     state=1;
     threshold=8192.0-f;
+  } else {
+    state=0;
+    threshold=8192.0;
   }
+
 }
 
 
