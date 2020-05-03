@@ -105,7 +105,8 @@ float mainLut[8192]={0};
 typedef void doOsc_t(struct oscillator* osc, uint16_t* buf);
 doOsc_t oscAlgo1;
 doOsc_t oscAlgo2;
-doOsc_t oscAlgo3;
+doOsc_t oscAlgo3_square;
+doOsc_t oscAlgo3_saw;
 doOsc_t *doOscillator = &oscAlgo1;
 
 typedef void doOscStereo_t(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2);
@@ -658,7 +659,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             break;
           case algo_3_poly:
             for (int i=POLYPHONY;i--;) {oscillators[i].phase=8192.0;oscillators[i].state=3;}
-            doOscillator = &oscAlgo3;
+            doOscillator = (waveParam==0) ? &oscAlgo3_saw : &oscAlgo3_square;
             generateIntoBuffer = &generateIntoBufferFullPoly;
             noteOn = &noteOnFullPoly;
             noteOff = &noteOffFullPoly;
@@ -696,7 +697,9 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       break;
     case cc_wave_param:
       waveParam = i;
-      targetWave&=0x7F;
+        if (doOscillator == &oscAlgo3_saw || doOscillator == &oscAlgo3_square) {
+          doOscillator = (waveParam==0) ? &oscAlgo3_saw : &oscAlgo3_square;
+        } else targetWave&=0x7F;
       break;
     case cc_arpeg_speed:
       arpegSpeed=(i>>2);
@@ -1561,7 +1564,7 @@ const float bleptable[]={0,0.0077972412109375,0.01556396484375,0.023300170898437
 #define output osc->fm_amplitude
 #define state osc->state
 
-inline float blepSquare(struct oscillator* osc, float f, float idt, float duty){
+inline float blepSquare(struct oscillator* osc, float f, float idt, float duty, float pulseNorm){
 
   osc->phase +=f;
 
@@ -1572,25 +1575,25 @@ inline float blepSquare(struct oscillator* osc, float f, float idt, float duty){
       case 0: // duty-f;
         threshold=0;
         state=1;
-        return bleptable[ (int)((duty-osc->phase)*idt) ];
+        return pulseNorm+bleptable[ (int)((duty-osc->phase)*idt) ];
 
       case 1: //duty
         threshold=8192.0-f;
         state=2;
-        output=-1;
-        return -bleptable[ (int)((osc->phase-duty)*idt) ];
+        output=pulseNorm-1;
+        return pulseNorm-bleptable[ (int)((osc->phase-duty)*idt) ];
 
       case 2: //8192-f
         threshold=0;
         state=3;
-        return -bleptable[ (int)((8192-osc->phase)*idt) ];
+        return pulseNorm-bleptable[ (int)((8192-osc->phase)*idt) ];
 
       case 3: // 8192
         osc->phase-=8192.0f;
         threshold=duty-f;
         state=0;
-        output=1.0;
-        return bleptable[ (int)(osc->phase*idt) ];
+        output=pulseNorm+1.0;
+        return pulseNorm+bleptable[ (int)(osc->phase*idt) ];
 
     }
 
@@ -1599,22 +1602,24 @@ inline float blepSquare(struct oscillator* osc, float f, float idt, float duty){
 
 }
 
-inline void blepSquareRecalc(struct oscillator* osc, float f, float idt, float duty) {
+inline void blepSquareRecalc(struct oscillator* osc, float f, float idt, float duty, float pulseNorm) {
+
+  pulseNorm=1.0-duty/4096.0;
 
   if (osc->phase<duty-f) {
     state=0;
-    output=1.0;
+    output=pulseNorm+1.0;
     threshold=duty-f;
   } else if (osc->phase<duty) {
-    output=1.0;
+    output=pulseNorm+1.0;
     state=1;
     threshold=duty;
   } else if (osc->phase<8192-f) {
-    output=-1.0;
+    output=pulseNorm-1.0;
     state=2;
     threshold=8192.0-f;
   } else {
-    output=-1.0;
+    output=pulseNorm-1.0;
     state=3;
     threshold=8192.0;
   }
@@ -1737,29 +1742,30 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 
 }
 
-void oscAlgo3Square(struct oscillator* osc, uint16_t* buf){
+void oscAlgo3_square(struct oscillator* osc, uint16_t* buf){
 
   phase_incr(osc->lfo_phase, lfo_freq)
   float f = calculateFrequency(osc);
   if (f>=2048.0) return;
   float idt=256.0/f;
+  float pulseNorm;
 
   if (osc->released) {osc->alive=0;osc->phase=8192.0;osc->state=3; return;}
 
   float duty= (waveParam+1)*28 +512;
   if (duty<2*f) duty=2*f;
-  blepSquareRecalc(osc,f,idt,duty);
+  blepSquareRecalc(osc,f,idt,duty,pulseNorm);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
-    buf[i] += blepSquare(osc,f,idt,duty) * osc->velocity;
+    buf[i] += blepSquare(osc,f,idt,duty,pulseNorm) * osc->velocity;
 
   }
 
   graceful_theft(osc);
 }
 
-void oscAlgo3(struct oscillator* osc, uint16_t* buf){
+void oscAlgo3_saw(struct oscillator* osc, uint16_t* buf){
 
   phase_incr(osc->lfo_phase, lfo_freq)
   float f = calculateFrequency(osc);
