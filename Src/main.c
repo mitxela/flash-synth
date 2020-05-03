@@ -1620,6 +1620,42 @@ inline void blepSquareRecalc(struct oscillator* osc, float f, float idt, float d
   }
 }
 
+inline float blepSaw(struct oscillator* osc, float f, float idt, float incr){
+
+  output +=incr;
+  osc->phase +=f;
+
+  if (osc->phase >= threshold) {
+    if (state==0) {
+      threshold=8192.0-f;
+      state=1;
+      return output+1 - bleptable[ (int)((osc->phase)*idt) ];
+    } else {
+      threshold=0;
+      state=0;
+      osc->phase-=8192.0;
+      output-=2.0;
+      return output+1 + bleptable[ (int)((-osc->phase)*idt) ];
+    }
+  }
+
+  return output;
+}
+
+inline void blepSawRecalc(struct oscillator* osc, float f, float idt, float incr) {
+
+  output=osc->phase/4096.0 -1.0;
+
+  if (osc->phase<f) {
+    //state=0;
+    //threshold=0;
+  } else if (osc->phase<8192.0-f) {
+    state=1;
+    threshold=8192.0-f;
+  }
+}
+
+
 #undef threshold
 #undef output
 #undef state
@@ -1700,7 +1736,7 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 
 }
 
-void oscAlgo3(struct oscillator* osc, uint16_t* buf){
+void oscAlgo3Square(struct oscillator* osc, uint16_t* buf){
 
   phase_incr(osc->lfo_phase, lfo_freq)
   float f = calculateFrequency(osc);
@@ -1721,6 +1757,28 @@ void oscAlgo3(struct oscillator* osc, uint16_t* buf){
 
   graceful_theft(osc);
 }
+
+void oscAlgo3(struct oscillator* osc, uint16_t* buf){
+
+  phase_incr(osc->lfo_phase, lfo_freq)
+  float f = calculateFrequency(osc);
+  if (f>=2048.0) return;
+  float idt=256.0/f;
+  float incr = f/4096.0;
+
+  if (osc->released) {osc->alive=0;osc->phase=8192.0;osc->state=3; return;}
+
+  blepSawRecalc(osc,f,idt,incr);
+
+  for (uint16_t i = 0; i<BUFFERSIZE; i++) {
+
+    buf[i] += blepSaw(osc,f,idt, incr) * osc->velocity;
+
+  }
+
+  graceful_theft(osc);
+}
+
 
 void generateIntoBufferFullPoly(uint16_t* buf, uint16_t* buf2){
 
