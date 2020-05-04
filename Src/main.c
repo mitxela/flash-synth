@@ -79,7 +79,6 @@ struct oscillator {
   uint32_t starttime;
 
   uint16_t velocity;
-  uint8_t state;
   unsigned alive:1;
   unsigned released:1;
   unsigned sustained:1;
@@ -650,7 +649,6 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
 
           case algo_3_mono:
             oscillators[0].phase=8192.0;
-            oscillators[0].state=3;
             monophonicAlgo = &algoMonophonic3;
             generateIntoBuffer = &generateIntoBufferMonophonic;
             noteOn = &noteOnMonophonic;
@@ -658,7 +656,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             setStereo(1);
             break;
           case algo_3_poly:
-            for (int i=POLYPHONY;i--;) {oscillators[i].phase=8192.0;oscillators[i].state=3;}
+            for (int i=POLYPHONY;i--;) {oscillators[i].phase=8192.0;}
             doOscillator = (waveParam==0) ? &oscAlgo3_saw : &oscAlgo3_square;
             generateIntoBuffer = &generateIntoBufferFullPoly;
             noteOn = &noteOnFullPoly;
@@ -1562,36 +1560,35 @@ const float bleptable[]={0,0.0077972412109375,0.01556396484375,0.023300170898437
 
 #define threshold osc->fm_phase
 #define output osc->fm_amplitude
-#define state osc->state
 
-inline float blepSquare(struct oscillator* osc, float f, float idt, float duty, float pulseNorm){
+inline float blepSquare(struct oscillator* osc, uint8_t* state, float f, float idt, float duty, float pulseNorm){
 
   osc->phase +=f;
 
   if (osc->phase >= threshold) {
 
-    switch (state) {
+    switch (*state) {
 
       case 0: // duty-f;
         threshold=0;
-        state=1;
+        *state=1;
         return pulseNorm+bleptable[ (int)((duty-osc->phase)*idt) ];
 
       case 1: //duty
         threshold=8192.0-f;
-        state=2;
+        *state=2;
         output=pulseNorm-1;
         return pulseNorm-bleptable[ (int)((osc->phase-duty)*idt) ];
 
       case 2: //8192-f
         threshold=0;
-        state=3;
+        *state=3;
         return pulseNorm-bleptable[ (int)((8192-osc->phase)*idt) ];
 
       case 3: // 8192
         osc->phase-=8192.0f;
         threshold=duty-f;
-        state=0;
+        *state=0;
         output=pulseNorm+1.0;
         return pulseNorm+bleptable[ (int)(osc->phase*idt) ];
 
@@ -1602,44 +1599,42 @@ inline float blepSquare(struct oscillator* osc, float f, float idt, float duty, 
 
 }
 
-inline void blepSquareRecalc(struct oscillator* osc, float f, float idt, float duty, float pulseNorm) {
-
-  pulseNorm=1.0-duty/4096.0;
+inline void blepSquareRecalc(struct oscillator* osc, uint8_t* state, float f, float idt, float duty, float pulseNorm) {
 
   if (osc->phase<duty-f) {
-    state=0;
+    *state=0;
     output=pulseNorm+1.0;
     threshold=duty-f;
   } else if (osc->phase<duty) {
     output=pulseNorm+1.0;
-    state=1;
+    *state=1;
     threshold=duty;
   } else if (osc->phase<8192-f) {
     output=pulseNorm-1.0;
-    state=2;
+    *state=2;
     threshold=8192.0-f;
   } else {
     output=pulseNorm-1.0;
-    state=3;
+    *state=3;
     threshold=8192.0;
   }
 }
 
-inline float blepSaw(struct oscillator* osc, float f, float idt, float incr){
+inline float blepSaw(struct oscillator* osc, uint8_t* state, float f, float idt, float incr){
 
   output +=incr;
   osc->phase +=f;
 
   if (osc->phase >= threshold) {
-    if (state==0) {
+    if (*state==0) {
       threshold=8192.0-f;
-      state=1;
+      *state=1;
       osc->phase-=8192.0;
       output-=2.0;
       return output+1 - bleptable[ (int)((osc->phase)*idt) ];
     } else {
       threshold=8192.0;
-      state=0;
+      *state=0;
       return output-1 + bleptable[ (int)((8192.0-osc->phase)*idt) ];
     }
   }
@@ -1647,15 +1642,15 @@ inline float blepSaw(struct oscillator* osc, float f, float idt, float incr){
   return output;
 }
 
-inline void blepSawRecalc(struct oscillator* osc, float f, float idt, float incr) {
+inline void blepSawRecalc(struct oscillator* osc, uint8_t* state, float f, float idt, float incr) {
 
   output=osc->phase/4096.0 -1.0;
 
   if (osc->phase<8192.0-f) {
-    state=1;
+    *state=1;
     threshold=8192.0-f;
   } else {
-    state=0;
+    *state=0;
     threshold=8192.0;
   }
 
@@ -1664,7 +1659,6 @@ inline void blepSawRecalc(struct oscillator* osc, float f, float idt, float incr
 
 #undef threshold
 #undef output
-#undef state
 
 void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 
@@ -1685,15 +1679,17 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 
   float idtr=256.0/fr;
   float idtl=256.0/fl;
+  uint8_t statel, stater;
   //f*=0.5;
   //float idtw=256.0/f;
 
   float duty=(waveParam+1)*28 +512;
   if (duty<2*fr) duty=2*fr;
   if (duty<2*fl) duty=2*fl;
+  float pulseNorm=1.0-duty/4096.0;
 
-  blepSquareRecalc(osc, fl,idtl,duty);
-  blepSquareRecalc(osc2,fr,idtr,duty);
+  blepSquareRecalc(osc, &statel,fl,idtl,duty,pulseNorm);
+  blepSquareRecalc(osc2,&stater,fr,idtr,duty,pulseNorm);
   //blepSquareRecalc(osc3,f, idtw,duty);
 
   float input;
@@ -1722,8 +1718,8 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
     osc->amplitude += ampDiff;
     cut += cdiff;
 
-    input = blepSquare(osc, fl,idtl,duty)
-          + blepSquare(osc2,fr,idtr,duty);
+    input = blepSquare(osc, &statel,fl,idtl,duty,pulseNorm)
+          + blepSquare(osc2,&stater,fr,idtr,duty,pulseNorm);
           //+ blepSquare(osc3,f ,idtw,duty);
 
 
@@ -1748,17 +1744,20 @@ void oscAlgo3_square(struct oscillator* osc, uint16_t* buf){
   float f = calculateFrequency(osc);
   if (f>=2048.0) return;
   float idt=256.0/f;
-  float pulseNorm;
 
-  if (osc->released) {osc->alive=0;osc->phase=8192.0;osc->state=3; return;}
+  uint8_t state;
+
+  if (osc->released) {osc->alive=0;osc->phase=8192.0; return;}
 
   float duty= (waveParam+1)*28 +512;
   if (duty<2*f) duty=2*f;
-  blepSquareRecalc(osc,f,idt,duty,pulseNorm);
+  float pulseNorm=1.0-duty/4096.0;
+
+  blepSquareRecalc(osc,&state,f,idt,duty,pulseNorm);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
-    buf[i] += blepSquare(osc,f,idt,duty,pulseNorm) * osc->velocity;
+    buf[i] += blepSquare(osc,&state,f,idt,duty,pulseNorm) * osc->velocity;
 
   }
 
@@ -1772,14 +1771,15 @@ void oscAlgo3_saw(struct oscillator* osc, uint16_t* buf){
   if (f>=2048.0) return;
   float idt=256.0/f;
   float incr = f/4096.0;
+  uint8_t state;
 
-  if (osc->released) {osc->alive=0;osc->phase=8192.0;osc->state=3; return;}
+  if (osc->released) {osc->alive=0;osc->phase=8192.0; return;}
 
-  blepSawRecalc(osc,f,idt,incr);
+  blepSawRecalc(osc,&state,f,idt,incr);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
 
-    buf[i] += blepSaw(osc,f,idt, incr) * osc->velocity;
+    buf[i] += blepSaw(osc,&state,f,idt, incr) * osc->velocity;
 
   }
 
