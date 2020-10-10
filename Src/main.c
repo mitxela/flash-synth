@@ -1624,7 +1624,8 @@ int main(void) {
 
   for (uint8_t i=16;i--;) {
     channels[i].pbSensitivity = DEFAULT_PB_RANGE;
-    channels[i].tuning = &fEqualLookup[0];
+    parameterChange(i, cc_per_channel_tuning, synthConfig.startupTuning[i]);
+
   }
   
   loadPatch(0);

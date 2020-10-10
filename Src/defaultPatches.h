@@ -2,13 +2,14 @@
 __attribute__((section(".Config"))) volatile struct {
 
   uint8_t channel;
-  float somethingelse;
+  uint8_t somethingelse[512-16-1];
+  uint8_t startupTuning[16];
 
 } synthConfig = {
 
   .channel = 255,
-  .somethingelse = 0.0
-
+  .somethingelse = {0},
+  .startupTuning = {0}
 };
 
 __attribute__((section(".Patches"))) const uint8_t bPatches[128][64] = {
