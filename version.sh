@@ -1,5 +1,5 @@
 
-VERSION="00000004" # hex
+VERSION="00000005" # hex
 
 if [ `git diff-index --quiet HEAD --` ]; then
   HASH=$(printf "0%s" $(git rev-parse --short HEAD))
