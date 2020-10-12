@@ -529,8 +529,10 @@ skipAntiAliasing:
 }
 
 uint8_t fm_freq_cc[] = {0,0};
+uint8_t attackrate_cc=0;
+uint8_t releaserate_cc=0;
 void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
-  static uint8_t fm_attack_cc=0, attackrate_cc=0, releaserate_cc=0;
+  static uint8_t fm_attack_cc=0;
 
   #define set_fm_freq() fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
   #define set_fm_attack() fm_attack = (fm_depth * 0.001/((float)fm_attack_cc+0.5));
@@ -1229,6 +1231,35 @@ inline float envelope(struct oscillator* osc){
   return d;
 }
 
+// Alternate envelope that allows zero-length slopes
+#define envelopeZero_setup() if (osc->released && releaserate_cc==0) {osc->alive=0;osc->amplitude=0;osc->phase=8192.0; return;}
+
+inline float envelopeZero(struct oscillator* osc){
+  float d = 0.0;
+
+  if (osc->stolen) {
+    return -osc->amplitude /BUFFERSIZE;
+  }
+
+  if (osc->released) {
+    d = releaseRate;
+    if (osc->amplitude < -releaseRate*BUFFERSIZE) {
+      d = - osc->amplitude / BUFFERSIZE;
+      osc->alive =0;
+    }
+  } else {
+    if (osc->amplitude < osc->velocity){
+      if (attackrate_cc==0) {osc->amplitude = osc->velocity; return 0.0;}
+      d = attackRate;
+      if (osc->amplitude > osc->velocity - attackRate*BUFFERSIZE) {
+        d = (osc->velocity - osc->amplitude)/BUFFERSIZE;
+      }
+    }
+  }
+
+  return d;
+}
+
 inline float intEnvelope(struct oscillator* osc){
   float d;
   if (osc->intAttack) {
@@ -1747,7 +1778,8 @@ void oscAlgo3_square(struct oscillator* osc, uint16_t* buf){
 
   uint8_t state;
 
-  if (osc->released) {osc->alive=0;osc->phase=8192.0; return;}
+  envelopeZero_setup()
+  float ampDiff = envelopeZero(osc);
 
   float duty= (waveParam+1)*28 +512;
   if (duty<2*f) duty=2*f;
@@ -1756,9 +1788,8 @@ void oscAlgo3_square(struct oscillator* osc, uint16_t* buf){
   blepSquareRecalc(osc,&state,f,idt,duty,pulseNorm);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
-
-    buf[i] += blepSquare(osc,&state,f,idt,duty,pulseNorm) * osc->velocity;
-
+    osc->amplitude += ampDiff;
+    buf[i] += blepSquare(osc,&state,f,idt,duty,pulseNorm) * osc->amplitude;
   }
 
   graceful_theft(osc);
@@ -1773,14 +1804,14 @@ void oscAlgo3_saw(struct oscillator* osc, uint16_t* buf){
   float incr = f/4096.0;
   uint8_t state;
 
-  if (osc->released) {osc->alive=0;osc->phase=8192.0; return;}
+  envelopeZero_setup()
+  float ampDiff = envelopeZero(osc);
 
   blepSawRecalc(osc,&state,f,idt,incr);
 
   for (uint16_t i = 0; i<BUFFERSIZE; i++) {
-
-    buf[i] += blepSaw(osc,&state,f,idt, incr) * osc->velocity;
-
+    osc->amplitude += ampDiff;
+    buf[i] += blepSaw(osc,&state,f,idt, incr) * osc->amplitude;
   }
 
   graceful_theft(osc);
