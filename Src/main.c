@@ -179,8 +179,8 @@ enum {
   algo_2_stereo,
   algo_2_mono,
   algo_2_quad,
-  algo_3_mono,
-  algo_3_poly
+  algo_3_poly,
+  algo_3_mono
   //algo_1_poly4
 };
 
@@ -528,11 +528,8 @@ skipAntiAliasing:
   if (id==targetWave && param==waveParam) targetWave|=0x80;
 }
 
-uint8_t fm_freq_cc[] = {0,0};
-uint8_t attackrate_cc=0;
-uint8_t releaserate_cc=0;
+uint8_t fm_freq_cc[] = {0,0}, attackrate_cc=0, releaserate_cc=0, fm_attack_cc=0;
 void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
-  static uint8_t fm_attack_cc=0;
 
   #define set_fm_freq() fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
   #define set_fm_attack() fm_attack = (fm_depth * 0.001/((float)fm_attack_cc+0.5));
@@ -1590,7 +1587,7 @@ const float bleptable[]={0,0.0077972412109375,0.01556396484375,0.023300170898437
 
 
 #define threshold osc->fm_phase
-#define output osc->fm_amplitude
+#define output osc->fm_depth_cache
 
 inline float blepSquare(struct oscillator* osc, uint8_t* state, float f, float idt, float duty, float pulseNorm){
 
@@ -1705,8 +1702,26 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
     return;
   }
 */
-  //float preAmpDiff = intEnvelope(osc);
+
+  #define s1 oscillators[2].fm_amplitude
+  #define s2 oscillators[3].fm_amplitude
+  #define s3 oscillators[4].fm_amplitude
+  #define s4 oscillators[5].fm_amplitude
+  #define cut oscillators[6].fm_amplitude
+  #define preamp oscillators[0].fm_amplitude
+  #define rclip 2.0
+
   float ampDiff = envelope(osc);
+
+  if (osc->intAttack) {
+    preamp += 1.0/((float)fm_attack_cc+0.5);
+    if (preamp >= 1.0) {
+      preamp = 1.0;
+      osc->intAttack=0;
+    }
+  } else {
+    preamp *=1.0-BUFFERSIZE*(1.0-fm_decay);
+  }
 
   float idtr=256.0/fr;
   float idtl=256.0/fl;
@@ -1734,14 +1749,10 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
   if (tcut>1.0) tcut=1.0;
   else if (tcut<0.0) tcut=0.0;
 
+  tcut *= preamp;
+
   res-=tcut*tcut*8; if(res<0)res=0;
 
-  #define s1 oscillators[2].fm_amplitude
-  #define s2 oscillators[3].fm_amplitude
-  #define s3 oscillators[4].fm_amplitude
-  #define s4 oscillators[5].fm_amplitude
-  #define cut oscillators[6].fm_amplitude
-  #define rclip 2.0
 
   float cdiff = (tcut-cut)/((float)BUFFERSIZE);
 
@@ -1767,6 +1778,13 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 
   }
 
+  #undef s1
+  #undef s2
+  #undef s3
+  #undef s4
+  #undef cut
+  #undef preamp
+  #undef rclip
 }
 
 void oscAlgo3_square(struct oscillator* osc, uint16_t* buf){
