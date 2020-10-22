@@ -98,6 +98,7 @@ float portamento = 1.0;
 
 uint32_t timestamp = 0;
 uint8_t targetWave = 0;
+uint8_t squareSawSwitch = 0;
 
 float mainLut[8192]={0};
 
@@ -599,6 +600,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
         oscillators[0].amplitude=0;
         monoNoteNow=monoNoteEnd=monoNoteReleaseEnd=0;
         monoNoteTimer=254;
+        squareSawSwitch=0;
         switch (i){
           case algo_1_poly: default:
             doOscillator = &oscAlgo1;
@@ -649,6 +651,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
 
           case algo_3_mono:
             oscillators[0].phase=8192.0;
+            squareSawSwitch = 1;
             monophonicAlgo = (waveParam==0) ? &algoMonophonic3_saw : &algoMonophonic3_square;
             generateIntoBuffer = &generateIntoBufferMonophonic;
             noteOn = &noteOnMonophonic;
@@ -657,6 +660,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             break;
           case algo_3_poly:
             for (int i=POLYPHONY;i--;) {oscillators[i].phase=8192.0;}
+            squareSawSwitch = 1;
             doOscillator = (waveParam==0) ? &oscAlgo3_saw : &oscAlgo3_square;
             generateIntoBuffer = &generateIntoBufferFullPoly;
             noteOn = &noteOnFullPoly;
@@ -695,9 +699,8 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       break;
     case cc_wave_param:
       waveParam = i;
-        if (doOscillator == &oscAlgo3_saw || doOscillator == &oscAlgo3_square) {
+        if (squareSawSwitch) {
           doOscillator = (waveParam==0) ? &oscAlgo3_saw : &oscAlgo3_square;
-        } else if (monophonicAlgo == &algoMonophonic3_saw || monophonicAlgo == &algoMonophonic3_square) {
           monophonicAlgo = (waveParam==0) ? &algoMonophonic3_saw : &algoMonophonic3_square;
         } else targetWave&=0x7F;
       break;
