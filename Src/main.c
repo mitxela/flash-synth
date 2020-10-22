@@ -51,7 +51,6 @@ float fm_attack = 2.0;
 float outputGain = 1.0;
 
 uint8_t waveParam =0x0F;
-uint8_t aa = 16;
 
 struct channel {
   int32_t bend;
@@ -99,12 +98,15 @@ float portamento = 1.0;
 
 uint32_t timestamp = 0;
 uint8_t targetWave = 0;
+uint8_t squareSawSwitch = 0;
 
 float mainLut[8192]={0};
 
 typedef void doOsc_t(struct oscillator* osc, uint16_t* buf);
 doOsc_t oscAlgo1;
 doOsc_t oscAlgo2;
+doOsc_t oscAlgo3_square;
+doOsc_t oscAlgo3_saw;
 doOsc_t *doOscillator = &oscAlgo1;
 
 typedef void doOscStereo_t(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2);
@@ -117,6 +119,8 @@ doOscStereo_t *doOscillatorStereo = &oscAlgo1Stereo;
 typedef void monophonicAlgo_t(float f, uint16_t* buf, uint16_t* buf2);
 monophonicAlgo_t algoMonophonic1;
 monophonicAlgo_t algoMonophonic2;
+monophonicAlgo_t algoMonophonic3_square;
+monophonicAlgo_t algoMonophonic3_saw;
 monophonicAlgo_t *monophonicAlgo = &algoMonophonic2;
 
 typedef void doOscPoly4_t(struct oscillator* osc, struct oscillator* osc2, struct oscillator* osc3, struct oscillator* osc4, uint16_t* buf, uint16_t* buf2);
@@ -163,7 +167,9 @@ enum {
   wave_SineEven,
   wave_AbsSineEven,
   wave_HardPulse,
-  wave_SoftPulse
+  wave_SoftPulse,
+  wave_HardSyncSine,
+  wave_HardSyncSaw
 };
 
 enum {
@@ -174,7 +180,9 @@ enum {
   algo_2_poly,
   algo_2_stereo,
   algo_2_mono,
-  algo_2_quad
+  algo_2_quad,
+  algo_3_poly,
+  algo_3_mono
   //algo_1_poly4
 };
 
@@ -249,24 +257,18 @@ void setStereo(int stereo){
 void antialias(unsigned int radius){
 // Must be symmetric
 
-  float b[1024]={};
   float sum = 0;
   float scale = 1.0/((float)radius);
-  unsigned int idx = 0;
-  
-  for (int i=0; i<radius; i++) {
-    b[i] = mainLut[8192 - radius + i];
+
+  for (int i=0; i<radius;i++) {
+    sum+=mainLut[i];
   }
 
   for (int i=0;i<8192;i++) {
-    sum=0;
-    for (int j=0; j<radius; j++) {
-      sum+=b[j];
-    }
-    b[idx++] = mainLut[i];
-    mainLut[i] = sum*scale;
-    
-    if (idx==radius) idx=0;
+    float t = sum*scale;
+    sum-=mainLut[i];
+    sum+=mainLut[ (i+radius)%8192 ];
+    mainLut[i] = t;
   }
 
 }
@@ -492,21 +494,44 @@ void setWaveform(uint8_t id, uint8_t param) {
       }
     }
     break;
+  case wave_HardSyncSine:
+    {
+      float step = (float)param*(1.0/16), j=0.0;
 
-
+      for (uint16_t i=0;i<8192;i++) {
+        mainLut[i]=sinLut[ (uint16_t)j ];
+        j+=step;
+        if (j>=8192.0) j-=8192.0;
+      }
+    }
+    break;
+  case wave_HardSyncSaw:
+    {
+      float step = (float)param*(1.0/16/8192.0);
+      float j=-0.5;
+      for (uint16_t i=0;i<8192;i++) {
+        mainLut[i]= j;
+        j+=step;
+        if (j>=0.5) j-=1.0;
+      }
+    }
+    waveCheck()
+    antialias(512);
+    antialias(512);
+    break;
   }
   waveCheck()
-  antialias((aa<<3)+8);
+  antialias(136);
   waveCheck()
-  antialias((aa<<3)+8);
+  antialias(136);
 
 skipAntiAliasing:
 
   if (id==targetWave && param==waveParam) targetWave|=0x80;
 }
 
+uint8_t fm_freq_cc[] = {0,0}, attackrate_cc=0, releaserate_cc=0, fm_attack_cc=0;
 void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
-  static uint8_t fm_freq_cc[] = {0,0}, fm_attack_cc=0, attackrate_cc=0, releaserate_cc=0;
 
   #define set_fm_freq() fm_freq=(float)((fm_freq_cc[0]<<7) + fm_freq_cc[1])/1024;
   #define set_fm_attack() fm_attack = (fm_depth * 0.001/((float)fm_attack_cc+0.5));
@@ -575,6 +600,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
         oscillators[0].amplitude=0;
         monoNoteNow=monoNoteEnd=monoNoteReleaseEnd=0;
         monoNoteTimer=254;
+        squareSawSwitch=0;
         switch (i){
           case algo_1_poly: default:
             doOscillator = &oscAlgo1;
@@ -623,6 +649,24 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
             setStereo(1);
             break;
 
+          case algo_3_mono:
+            oscillators[0].phase=8192.0;
+            squareSawSwitch = 1;
+            monophonicAlgo = (waveParam==0) ? &algoMonophonic3_saw : &algoMonophonic3_square;
+            generateIntoBuffer = &generateIntoBufferMonophonic;
+            noteOn = &noteOnMonophonic;
+            noteOff = &noteOffMonophonic;
+            setStereo(1);
+            break;
+          case algo_3_poly:
+            for (int i=POLYPHONY;i--;) {oscillators[i].phase=8192.0;}
+            squareSawSwitch = 1;
+            doOscillator = (waveParam==0) ? &oscAlgo3_saw : &oscAlgo3_square;
+            generateIntoBuffer = &generateIntoBufferFullPoly;
+            noteOn = &noteOnFullPoly;
+            noteOff = &noteOffFullPoly;
+            setStereo(0);
+            break;
           // case algo_1_poly:
             // doOscillatorPoly4 = &oscAlgo1Poly4;
             // generateIntoBuffer = &generateIntoBufferPoly4;
@@ -655,7 +699,10 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       break;
     case cc_wave_param:
       waveParam = i;
-      targetWave&=0x7F;
+        if (squareSawSwitch) {
+          doOscillator = (waveParam==0) ? &oscAlgo3_saw : &oscAlgo3_square;
+          monophonicAlgo = (waveParam==0) ? &algoMonophonic3_saw : &algoMonophonic3_square;
+        } else targetWave&=0x7F;
       break;
     case cc_arpeg_speed:
       arpegSpeed=(i>>2);
@@ -1187,6 +1234,35 @@ inline float envelope(struct oscillator* osc){
   return d;
 }
 
+// Alternate envelope that allows zero-length slopes
+#define envelopeZero_setup() if (osc->released && releaserate_cc==0) {osc->alive=0;osc->amplitude=0;osc->phase=8192.0; return;}
+
+inline float envelopeZero(struct oscillator* osc){
+  float d = 0.0;
+
+  if (osc->stolen) {
+    return -osc->amplitude /BUFFERSIZE;
+  }
+
+  if (osc->released) {
+    d = releaseRate;
+    if (osc->amplitude < -releaseRate*BUFFERSIZE) {
+      d = - osc->amplitude / BUFFERSIZE;
+      osc->alive =0;
+    }
+  } else {
+    if (osc->amplitude < osc->velocity){
+      if (attackrate_cc==0) {osc->amplitude = osc->velocity; return 0.0;}
+      d = attackRate;
+      if (osc->amplitude > osc->velocity - attackRate*BUFFERSIZE) {
+        d = (osc->velocity - osc->amplitude)/BUFFERSIZE;
+      }
+    }
+  }
+
+  return d;
+}
+
 inline float intEnvelope(struct oscillator* osc){
   float d;
   if (osc->intAttack) {
@@ -1266,7 +1342,6 @@ void oscAlgo2(struct oscillator* osc, uint16_t* buf){
 
   graceful_theft(osc);
 }
-
 
 void oscAlgo1Stereo(struct oscillator* osc, struct oscillator* osc2, uint16_t* buf, uint16_t* buf2) {
 
@@ -1510,6 +1585,125 @@ void algoMonophonic2(float f, uint16_t* buf, uint16_t* buf2) {
   }
 
 }
+
+
+
+const float bleptable[]={0,0.0077972412109375,0.01556396484375,0.0233001708984375,0.031005859375,0.0386810302734375,0.04632568359375,0.0539398193359375,0.0615234375,0.0690765380859375,0.07659912109375,0.0840911865234375,0.091552734375,0.0989837646484375,0.10638427734375,0.1137542724609375,0.12109375,0.1284027099609375,0.13568115234375,0.1429290771484375,0.150146484375,0.1573333740234375,0.16448974609375,0.1716156005859375,0.1787109375,0.1857757568359375,0.19281005859375,0.1998138427734375,0.206787109375,0.2137298583984375,0.22064208984375,0.2275238037109375,0.234375,0.2411956787109375,0.24798583984375,0.2547454833984375,0.261474609375,0.2681732177734375,0.27484130859375,0.2814788818359375,0.2880859375,0.2946624755859375,0.30120849609375,0.3077239990234375,0.314208984375,0.3206634521484375,0.32708740234375,0.3334808349609375,0.33984375,0.3461761474609375,0.35247802734375,0.3587493896484375,0.364990234375,0.3712005615234375,0.37738037109375,0.3835296630859375,0.3896484375,0.3957366943359375,0.40179443359375,0.4078216552734375,0.413818359375,0.4197845458984375,0.42572021484375,0.4316253662109375,0.4375,0.4433441162109375,0.44915771484375,0.4549407958984375,0.460693359375,0.4664154052734375,0.47210693359375,0.4777679443359375,0.4833984375,0.4889984130859375,0.49456787109375,0.5001068115234375,0.505615234375,0.5110931396484375,0.51654052734375,0.5219573974609375,0.52734375,0.5326995849609375,0.53802490234375,0.5433197021484375,0.548583984375,0.5538177490234375,0.55902099609375,0.5641937255859375,0.5693359375,0.5744476318359375,0.57952880859375,0.5845794677734375,0.589599609375,0.5945892333984375,0.59954833984375,0.6044769287109375,0.609375,0.6142425537109375,0.61907958984375,0.6238861083984375,0.628662109375,0.6334075927734375,0.63812255859375,0.6428070068359375,0.6474609375,0.6520843505859375,0.65667724609375,0.6612396240234375,0.665771484375,0.6702728271484375,0.67474365234375,0.6791839599609375,0.68359375,0.6879730224609375,0.69232177734375,0.6966400146484375,0.700927734375,0.7051849365234375,0.70941162109375,0.7136077880859375,0.7177734375,0.7219085693359375,0.72601318359375,0.7300872802734375,0.734130859375,0.7381439208984375,0.74212646484375,0.7460784912109375,0.75,0.7538909912109375,0.75775146484375,0.7615814208984375,0.765380859375,0.7691497802734375,0.77288818359375,0.7765960693359375,0.7802734375,0.7839202880859375,0.78753662109375,0.7911224365234375,0.794677734375,0.7982025146484375,0.80169677734375,0.8051605224609375,0.80859375,0.8119964599609375,0.81536865234375,0.8187103271484375,0.822021484375,0.8253021240234375,0.82855224609375,0.8317718505859375,0.8349609375,0.8381195068359375,0.84124755859375,0.8443450927734375,0.847412109375,0.8504486083984375,0.85345458984375,0.8564300537109375,0.859375,0.8622894287109375,0.86517333984375,0.8680267333984375,0.870849609375,0.8736419677734375,0.87640380859375,0.8791351318359375,0.8818359375,0.8845062255859375,0.88714599609375,0.8897552490234375,0.892333984375,0.8948822021484375,0.89739990234375,0.8998870849609375,0.90234375,0.9047698974609375,0.90716552734375,0.9095306396484375,0.911865234375,0.9141693115234375,0.91644287109375,0.9186859130859375,0.9208984375,0.9230804443359375,0.92523193359375,0.9273529052734375,0.929443359375,0.9315032958984375,0.93353271484375,0.9355316162109375,0.9375,0.9394378662109375,0.94134521484375,0.9432220458984375,0.945068359375,0.9468841552734375,0.94866943359375,0.9504241943359375,0.9521484375,0.9538421630859375,0.95550537109375,0.9571380615234375,0.958740234375,0.9603118896484375,0.96185302734375,0.9633636474609375,0.96484375,0.9662933349609375,0.96771240234375,0.9691009521484375,0.970458984375,0.9717864990234375,0.97308349609375,0.9743499755859375,0.9755859375,0.9767913818359375,0.97796630859375,0.9791107177734375,0.980224609375,0.9813079833984375,0.98236083984375,0.9833831787109375,0.984375,0.9853363037109375,0.98626708984375,0.9871673583984375,0.988037109375,0.9888763427734375,0.98968505859375,0.9904632568359375,0.9912109375,0.9919281005859375,0.99261474609375,0.9932708740234375,0.993896484375,0.9944915771484375,0.99505615234375,0.9955902099609375,0.99609375,0.9965667724609375,0.99700927734375,0.9974212646484375,0.997802734375,0.9981536865234375,0.99847412109375,0.9987640380859375,0.9990234375,0.9992523193359375,0.99945068359375,0.9996185302734375,0.999755859375,0.9998626708984375,0.99993896484375,0.9999847412109375};
+
+
+
+#define threshold osc->fm_phase
+#define output osc->fm_depth_cache
+
+inline float blepSquare(struct oscillator* osc, uint8_t* state, float f, float idt, float duty, float pulseNorm){
+
+  osc->phase +=f;
+
+  if (osc->phase >= threshold) {
+
+    switch (*state) {
+
+      case 0: // duty-f;
+        threshold=0;
+        *state=1;
+        return pulseNorm+bleptable[ (int)((duty-osc->phase)*idt) ];
+
+      case 1: //duty
+        threshold=8192.0-f;
+        *state=2;
+        output=pulseNorm-1;
+        return pulseNorm-bleptable[ (int)((osc->phase-duty)*idt) ];
+
+      case 2: //8192-f
+        threshold=0;
+        *state=3;
+        return pulseNorm-bleptable[ (int)((8192-osc->phase)*idt) ];
+
+      case 3: // 8192
+        osc->phase-=8192.0f;
+        threshold=duty-f;
+        *state=0;
+        output=pulseNorm+1.0;
+        return pulseNorm+bleptable[ (int)(osc->phase*idt) ];
+
+    }
+
+  }
+  return output;
+
+}
+
+inline void blepSquareRecalc(struct oscillator* osc, uint8_t* state, float f, float idt, float duty, float pulseNorm) {
+
+  if (osc->phase<duty-f) {
+    *state=0;
+    output=pulseNorm+1.0;
+    threshold=duty-f;
+  } else if (osc->phase<duty) {
+    output=pulseNorm+1.0;
+    *state=1;
+    threshold=duty;
+  } else if (osc->phase<8192-f) {
+    output=pulseNorm-1.0;
+    *state=2;
+    threshold=8192.0-f;
+  } else {
+    output=pulseNorm-1.0;
+    *state=3;
+    threshold=8192.0;
+  }
+}
+
+inline float blepSaw(struct oscillator* osc, uint8_t* state, float f, float idt, float incr){
+
+  output +=incr;
+  osc->phase +=f;
+
+  if (osc->phase >= threshold) {
+    if (*state==0) {
+      threshold=8192.0-f;
+      *state=1;
+      osc->phase-=8192.0;
+      output-=2.0;
+      return output+1 - bleptable[ (int)((osc->phase)*idt) ];
+    } else {
+      threshold=8192.0;
+      *state=0;
+      return output-1 + bleptable[ (int)((8192.0-osc->phase)*idt) ];
+    }
+  }
+
+  return output;
+}
+
+inline void blepSawRecalc(struct oscillator* osc, uint8_t* state, float f, float idt, float incr) {
+
+  output=osc->phase/4096.0 -1.0;
+
+  if (osc->phase<8192.0-f) {
+    *state=1;
+    threshold=8192.0-f;
+  } else {
+    *state=0;
+    threshold=8192.0;
+  }
+
+}
+
+
+#undef threshold
+#undef output
+
+
+#define SQUARE
+  #include "algo3_mono.h"
+  #include "algo3_poly16.h"
+#undef SQUARE
+
+#define SAW
+  #include "algo3_mono.h"
+  #include "algo3_poly16.h"
+#undef SAW
 
 
 void generateIntoBufferFullPoly(uint16_t* buf, uint16_t* buf2){
