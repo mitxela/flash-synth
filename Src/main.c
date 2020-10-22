@@ -1695,7 +1695,7 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 
   struct oscillator* osc= &oscillators[0];
   struct oscillator* osc2= &oscillators[1];
-  //struct oscillator* osc3= &oscillators[7];
+  struct oscillator* osc3= &oscillators[7];
 
 /*  if (fl>=2084.0 || fr>=2048.0 || osc->released) {
     for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i] = buf2[i] = 2048;}
@@ -1723,11 +1723,23 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
     preamp *=1.0-BUFFERSIZE*(1.0-fm_decay);
   }
 
+
+  uint8_t statel, stater, statew;
+
+  if ((targetWave&0x7f)==1)
+    f*=0.75;
+  else if ((targetWave&0x7f)==2)
+    f*=0.5;
+  else if ((targetWave&0x7f)==3)
+    f*=0.25;
+//  else if ((targetWave&0x7f)==4)
+//    f=0.0;
+//  else if ((targetWave&0x7f)==5)
+//    { fr=0;fl=0; }
+
   float idtr=256.0/fr;
   float idtl=256.0/fl;
-  uint8_t statel, stater;
-  //f*=0.5;
-  //float idtw=256.0/f;
+  float idtw=256.0/f;
 
   float duty=(waveParam+1)*28 +512;
   if (duty<2*fr) duty=2*fr;
@@ -1736,7 +1748,7 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
 
   blepSquareRecalc(osc, &statel,fl,idtl,duty,pulseNorm);
   blepSquareRecalc(osc2,&stater,fr,idtr,duty,pulseNorm);
-  //blepSquareRecalc(osc3,f, idtw,duty);
+  blepSquareRecalc(osc3,&statew,f, idtw,duty,pulseNorm);
 
   float input;
   float res = fm_freq_cc[1]/21.167; // 0..6
@@ -1761,8 +1773,8 @@ void algoMonophonic3(float f, uint16_t* buf, uint16_t* buf2) {
     cut += cdiff;
 
     input = blepSquare(osc, &statel,fl,idtl,duty,pulseNorm)
-          + blepSquare(osc2,&stater,fr,idtr,duty,pulseNorm);
-          //+ blepSquare(osc3,f ,idtw,duty);
+          + blepSquare(osc2,&stater,fr,idtr,duty,pulseNorm)
+          + blepSquare(osc3,&statew,f ,idtw,duty,pulseNorm);
 
 
     float resoclip = (s4-input)*res;
