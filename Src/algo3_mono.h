@@ -48,11 +48,11 @@ void FN_NAME(float f, uint16_t* buf, uint16_t* buf2) {
   struct oscillator* osc2= &oscillators[1];
   struct oscillator* osc3= &oscillators[7];
 
-/*  if (fl>=2084.0 || fr>=2048.0 || osc->released) {
+  if (fr>=2048.0) {
     for (uint16_t i = 0; i<BUFFERSIZE; i++) {buf[i] = buf2[i] = 2048;}
     return;
   }
-*/
+
 
   #define s1 oscillators[2].fm_amplitude
   #define s2 oscillators[3].fm_amplitude
