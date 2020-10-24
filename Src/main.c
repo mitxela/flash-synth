@@ -41,6 +41,7 @@ float fm_freq;
 float fm_depth;
 float fm_decay;
 float lfo_freq;
+float pwm_freq;
 float detuneUp;
 float detuneDown;
 
@@ -549,6 +550,7 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
 
     case cc_lfo_freq:
       lfo_freq = i==127? 0.0: 204.8 + (float)(i*4);
+      pwm_freq = (float)(i*i)*0.04419368838737677; //[0..712.8]
       break;
 
     case cc_attack_rate:

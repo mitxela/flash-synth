@@ -1,11 +1,17 @@
 #ifdef SQUARE
   #define FN_NAME algoMonophonic3_square
 
+  // sinLut [-1..+1]
+  // duty wants [512..4096]
+  // fm_depth [0..25]
+  //   (4096-512)/25/2 = 71.68
+
   #define SETUP() \
-    float duty=(waveParam+1)*28 +512; \
+    phase_incr(osc3->lfo_phase, pwm_freq) \
+    float duty = (waveParam+1)*28 + 512 \
+               + sinLut[(int)(osc3->lfo_phase)]*fm_depth*71.68; \
     if (duty<2*fr) duty=2*fr; \
-    if (duty<2*f) duty=2*f; \
-    if (duty<2*fl) duty=2*fl; \
+    if (duty>4096.0) duty=4096; \
     float pulseNorm=1.0-duty/4096.0; \
     \
     blepSquareRecalc(osc, &statel,fl,idtl,duty,pulseNorm); \
