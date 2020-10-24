@@ -89,10 +89,13 @@ void FN_NAME(float f, uint16_t* buf, uint16_t* buf2) {
     f*=0.5;
   else if ((targetWave&0x7f)==3)
     f*=0.25;
-//  else if ((targetWave&0x7f)==4)
-//    f=0.0;
-//  else if ((targetWave&0x7f)==5)
-//    { fr=0;fl=0; }
+  else if ((targetWave&0x7f)==4) {
+    f=0.0;
+  }
+  else if ((targetWave&0x7f)==5){
+    fr=f;
+    fl=0;f=0; 
+  }
 
   float idtr=256.0/fr;
   float idtl=256.0/fl;
@@ -100,13 +103,22 @@ void FN_NAME(float f, uint16_t* buf, uint16_t* buf2) {
 
   SETUP()
 
+  if (f==0){
+    osc3->phase=0.0;
+    osc3->fm_depth_cache=0.0;
+  }
+  if (fl==0){
+    osc->phase=0.0;
+    osc->fm_depth_cache=0.0;
+  }
+
   float input;
   float res = fm_freq_cc[1]/21.167; // 0..6
   float tcut = fm_freq_cc[0]/127.0f;// 0..1
 
   //float track=fm_depth*0.0005;
 
-  tcut += (f - 75.093) * 0.001968503937007874;
+  tcut += (fr - 75.093) * 0.001968503937007874;
 
   if (tcut>1.0) tcut=1.0;
   else if (tcut<0.0) tcut=0.0;
