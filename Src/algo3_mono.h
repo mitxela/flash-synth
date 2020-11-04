@@ -3,13 +3,13 @@
 
   // sinLut [-1..+1]
   // duty wants [512..4096]
-  // fm_depth [0..25]
-  //   (4096-512)/25/2 = 71.68
+  // (4096-512)/2 = 1795
+  // pwm_depth [0..1795]
 
   #define SETUP() \
     phase_incr(osc3->lfo_phase, pwm_freq) \
     float duty = (waveParam+1)*28 + 512 \
-               + sinLut[(int)(osc3->lfo_phase)]*fm_depth*71.68; \
+               + sinLut[(int)(osc3->lfo_phase)]*pwm_depth; \
     if (duty<2*fr) duty=2*fr; \
     if (duty>4096.0) duty=4096; \
     float pulseNorm=1.0-duty/4096.0; \

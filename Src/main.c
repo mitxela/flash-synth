@@ -42,6 +42,7 @@ float fm_depth;
 float fm_decay;
 float lfo_freq;
 float pwm_freq;
+float pwm_depth;
 float detuneUp;
 float detuneDown;
 
@@ -191,19 +192,20 @@ enum {
   cc_modulation = 1,
   cc_portamento = 5,
   cc_sustain = 64,
-  cc_lfo_freq = 76,
-  cc_attack_rate = 73,
-  cc_release_rate = 72,
-  cc_detune = 15,
-  cc_fm_freq = 20,
-  cc_fm_freq_fine = 21,
-  cc_fm_depth = 22,
-  cc_fm_attack_rate = 75,
-  cc_fm_decay_rate = 23,
-  cc_algo = 24,
-  cc_waveform = 25,
-  cc_wave_param = 26,
-  cc_arpeg_speed = 27,
+  cc_lfo_freq = 76,      // MMA Vibrato Rate
+  cc_attack_rate = 73,   // MMA Attack Time
+  cc_release_rate = 72,  // MMA Release Time
+  cc_detune = 15,        //  Undefined
+  cc_fm_freq = 20,       //  Undefined
+  cc_fm_freq_fine = 21,  //  Undefined
+  cc_fm_depth = 22,      //  Undefined
+  cc_fm_attack_rate = 75,// MMA Decay Time
+  cc_fm_decay_rate = 23, //  Undefined
+  cc_algo = 24,          //  Undefined
+  cc_waveform = 25,      //  Undefined
+  cc_wave_param = 26,    //  Undefined
+  cc_arpeg_speed = 27,   //  Undefined
+  cc_pwm_depth = 28,     //  Undefined
 
   cc_output_gain = 88,
 
@@ -591,6 +593,9 @@ void parameterChange(uint8_t chan, uint8_t cc, uint8_t i){
       fm_attack_cc=i;
       set_fm_attack()
       break;
+    case cc_pwm_depth:
+      pwm_depth=(float)(i*1795)/127;
+      break;
 
     case cc_fm_decay_rate:
       fm_decay=1.0 - ((float)(i*i)/25400000);
@@ -822,7 +827,8 @@ void loadPatch(uint8_t p){
     cc_detune, 
     cc_arpeg_speed,
     cc_portamento,
-    cc_output_gain
+    cc_output_gain,
+    cc_pwm_depth
   };
   for (uint8_t i=0;i<16;i++)
     parameterChange(i, cc_modulation, bPatches[p][0]);
