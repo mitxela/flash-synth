@@ -1,7 +1,7 @@
 ######################################
 # target
 ######################################
-TARGET = L476-1
+TARGET = flash-synth
 
 
 ######################################
@@ -140,7 +140,7 @@ LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BU
 
 # default action: build all
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).bin $(BUILD_DIR)/$(TARGET).pgm
-
+.PHONY : all
 
 #######################################
 # build the application
@@ -179,6 +179,8 @@ $(BUILD_DIR):
 	mkdir $@		
 
 # flash
+.PHONY: flash flash-mingw flash-stl
+
 flash: all
 	"/mnt/c/Program Files (x86)/STMicroelectronics/STM32 ST-LINK Utility/ST-LINK Utility/ST-LINK_CLI.exe" -c SWD UR -p $(BUILD_DIR)/$(TARGET).bin 0x8000000 -Rst
 
@@ -191,6 +193,7 @@ flash-stl: all
 #######################################
 # clean up
 #######################################
+.PHONY: clean
 clean:
 	-rm -fR $(BUILD_DIR)
   
