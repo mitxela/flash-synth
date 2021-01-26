@@ -81,3 +81,29 @@ In the build folder, a .pgm file is generated which gives a visual overview of p
 - bootloader distortion problem with original 150 units
 
 
+## Development board
+
+STM produce development boards for most STM32 chips. The great thing is that they subsidise the cost of them, especially the nucleo boards which often cost less than the parts that are on them.
+
+The primary advantage of using a dev board is that a USB J-link programmer is built in, so you can quickly flash a new firmware image without having to unplug the MIDI cable.
+
+The NUCLEO-L432KC board can be used to run the flash synth pretty much as-is. If you are sending MIDI data from a keyboard powered by the same source as the USB port on the nucleo board, then a single 2.2k pullup resistor on the midi data is all that's needed.
+
+On the board, the DAC outputs are labelled A3 and A4. MIDI data goes to UART1_RX, labelled D0/RX on the nucleo board.
+
+![Dev board pinout](https://os.mbed.com/media/uploads/bcostm/nucleo_l432kc_2017_10_09.png)
+https://os.mbed.com/platforms/ST-Nucleo-L432KC/
+
+To match the hardware closer, the DAC outputs should have a high pass filter and increased output impedance. The real hardware has this to limit the power delivered when low impedance headphones are connected, directly connecting them to the DAC buffer would brownout the chip.
+
+Originally I threw together a carrier using some protoboard like this:
+![original carrier board](https://mitxela.com/img/uploads/tinymidi/flash/L432devboard.jpg)
+
+Eventually that wore out so I made a new carrier, which has proper ground isolation:
+![new carrier board](https://mitxela.com/img/uploads/tinymidi/flash/devboard2.jpg)
+
+The nucleo board does not break out the BOOT0 pin. The blue wire in the picture above is soldered directly to the BOOT0 pad. This isn't necessary unless you want to debug the bootloader.
+
+Since the dev board is powered by USB, it is possible to up the clock speed and draw more power than would be normally available. I recommend testing on real hardware after any substantial change.
+
+I only populated one of these but I have another 9 spare boards I could share.
