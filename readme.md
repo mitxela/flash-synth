@@ -14,7 +14,7 @@ Wavetables are 8192 samples long. All oscillator phases are normalized from 0 to
 
 12-bit DAC means 4096 output levels, at a polyphony of 16 this means a maximum amplitude of ±128.
 
-Pretty much everything that can be cached, is cached. MIDI data says a certain parameter must be X, and we need X*K in the algorithm, then multiply by K at the moment it arrives. RAM is much cheaper than processor cycles.
+Pretty much everything that can be cached, is cached. MIDI data says a certain parameter must be X, and we need X\*K in the algorithm, then multiply by K at the moment it arrives. RAM is much cheaper than processor cycles.
 
 Envelopes are all optimised by caching their deltas, so the per-sample code only consists of an addition. This means they must be quantised to the buffer size. This is done in the inlined envelope functions.
 
@@ -37,6 +37,8 @@ The constant for filter tracking was determined experimentally, and may not be c
 
 ## Compiling
 
+Note: I have now added more detailed instructions [towards the end of this page](#detailed-compilation-instructions).
+
 `arm-gcc` and a posix environment are needed to compile. An ST-link utility is needed to flash the dev board. `make flash` assumes a WSL environment, use `make flash-stl` on linux. The makefile could be updated to detect OS.
 
 `xxd` (command line hex editor) is needed by `version.sh` (post-build step)
@@ -44,6 +46,7 @@ The constant for filter tracking was determined experimentally, and may not be c
 It's possible to attach GDB for debugging, some effort would be required to get this to work with an IDE.
 
 In the build folder, a .pgm file is generated which gives a visual overview of program memory usage.
+
 
 ## File descriptions
 
@@ -107,3 +110,67 @@ The nucleo board does not break out the BOOT0 pin. The blue wire in the picture 
 Since the dev board is powered by USB, it is possible to up the clock speed and draw more power than would be normally available. I recommend testing on real hardware after any substantial change.
 
 I only populated one of these but I have another 9 spare boards I could share.
+
+
+## Detailed compilation instructions
+
+### Compiling on Linux
+
+Install the ARM GCC toolchain from your package manager. Infuriatingly, it's inconsistently named in different places. On Debian/Ubuntu the package name is `gcc-arm-none-eabi` but on Arch the package name is `arm-none-eabi-gcc`. If you search for variations on `arm-gcc` and `gcc-arm` you should find it.
+
+Also install git, and xxd (which is normally packaged as part of Vim, but on Arch it's available standalone in the AUR). If you don't already have it, install `make` which will be part of the essential build tools (`build-essential` on Debian, `base-devel` on Arch).
+
+Then clone the repo, `cd` into it and run `make` to compile.
+
+### Compiling on Windows
+
+There are lots of ways of doing this, when I started I used mingw, later I compiled using WSL. There are two versions of WSL, I've only ever used version 1 but the instructions should be the same for WSL 2.
+
+WSL gives you a linux installation on windows. This could be Ubuntu, Debian, or whatever. WSL is apparently available in the windows store, but if you want WSL 1 you need to install it manually. Once installed, the compilation instructions are identical to building on Linux.
+
+If you're not interested in WSL then the best way to compile is probably MSYS2. I really like MSYS2, it uses pacman (as in Arch Linux) and generally works very well. Here's some step-by-step instructions:
+
+1. Start by heading to https://www.msys2.org/ and follow the installation instructions, which means downloading and running the installer, then running `pacman -Syu` etc. After installing, you may want to go to the options (right click the title bar) and under `Keys`, select `Ctrl+Shift+letter shortcuts`. This lets you paste by pressing ctrl+shift+V. 
+
+2. In the MSYS terminal, install the necessary software by running:
+   ```
+   pacman -S base-devel git vim mingw-w64-x86_64-arm-none-eabi-gcc
+   ```
+   (the `xxd` package is bundled with vim)
+
+3. Clone this repo. MSYS puts the C: drive at `/c/` (Whereas WSL puts the C: drive at `/mnt/c/`) but you can just clone into the msys home directory if you prefer, which is wherever you installed it (e.g. `C:\msys64\home\User`)
+   ```
+   git clone https://github.com/mitxela/flash-synth.git
+   ```
+   Note: if this github repo is private, you will need to authenticate. Github no longer allows password auth for cloning so you will need to import (or generate) an SSH key for the MSYS environment, and add the public part to your github profile. There are numerous guides online for how to do this. If/when we make this repo public, no extra steps here would be needed.
+
+4. Enter the directory by typing 
+   ```
+   cd flash-synth
+   ```
+
+5. Compile the code by typing
+   ```
+   make
+   ```
+If everything worked, you should now have a build folder, containing `flash-synth.bin`, along with `flash-synth.pgm` (the memory preview image) and a whole load of intermediate build files.
+
+### Updating
+
+If the code is updated and you want to download the latest version and compile it, within the flash-synth directory run:
+```
+git pull
+```
+and then
+```
+make
+```
+It will only re-compile the bits needed. If you want to recompile from scratch, run `make clean` first.
+
+### Development
+
+If you have a development board attached, you can compile the code and load it onto the dev board in one step by typing `make flash`, or the variants `make flash-mingw` or `make flash-stl`. It will depend on your environment and what flashing tools you have installed. I mostly used the official ST-LINK Utility, which is now apparently deprecated. On Linux there is a version simply called stlink.
+
+If you look in the Makefile, towards the end, you can see the commands being invoked by the variants of `make flash`. You may need to edit one of them to get it to work for you, or I may need to add another one for whatever the current accepted way of flashing dev boards is.
+
+I remember there are different versions of the ST-LINK Utility, the most widely distributed executable is an older version that doesn't recognise the STM32L432. If you search properly you should be able to find a version which supports it.
