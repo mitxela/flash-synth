@@ -1,3 +1,6 @@
+#!/bin/bash
+
+command -v xxd >/dev/null || { echo "xxd not found"; exit 1; }
 
 VERSION="00000006" # hex
 
