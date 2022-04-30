@@ -84,49 +84,84 @@ In the build folder, a .pgm file is generated which gives a visual overview of p
 - bootloader distortion problem with original 150 units
 
 
-## Development board
-
-STM produce development boards for most STM32 chips. The great thing is that they subsidise the cost of them, especially the nucleo boards which often cost less than the parts that are on them.
-
-The primary advantage of using a dev board is that a USB J-link programmer is built in, so you can quickly flash a new firmware image without having to unplug the MIDI cable.
-
-The NUCLEO-L432KC board can be used to run the flash synth pretty much as-is. If you are sending MIDI data from a keyboard powered by the same source as the USB port on the nucleo board, then a single 2.2k pullup resistor on the midi data is all that's needed.
-
-On the board, the DAC outputs are labelled A3 and A4. MIDI data goes to UART1_RX, labelled D0/RX on the nucleo board.
-
-![Dev board pinout](https://os.mbed.com/media/uploads/bcostm/nucleo_l432kc_2017_10_09.png)
-https://os.mbed.com/platforms/ST-Nucleo-L432KC/
-
-To match the hardware closer, the DAC outputs should have a high pass filter and increased output impedance. The real hardware has this to limit the power delivered when low impedance headphones are connected, directly connecting them to the DAC buffer would brownout the chip.
-
-Originally I threw together a carrier using some protoboard like this:
-![original carrier board](https://mitxela.com/img/uploads/tinymidi/flash/L432devboard.jpg)
-
-Eventually that wore out so I made a new carrier, which has proper ground isolation:
-![new carrier board](https://mitxela.com/img/uploads/tinymidi/flash/devboard2.jpg)
-
-The nucleo board does not break out the BOOT0 pin. The blue wire in the picture above is soldered directly to the BOOT0 pad. This isn't necessary unless you want to debug the bootloader.
-
-Since the dev board is powered by USB, it is possible to up the clock speed and draw more power than would be normally available. I recommend testing on real hardware after any substantial change.
-
-I only populated one of these but I have another 9 spare boards I could share.
-
-
 ## Detailed compilation instructions
 
-### Compiling on Linux
+Note: since this github repo is currently private, you need to authenticate to be able to clone it. Github no longer allows password auth for cloning so you will need to import (or generate) an SSH key, and add the public part to your github profile. There are numerous guides online for how to do this. If/when we make this repo public, this won't be needed.
 
-Install the ARM GCC toolchain from your package manager. Infuriatingly, it's inconsistently named in different places. On Debian/Ubuntu the package name is `gcc-arm-none-eabi` but on Arch the package name is `arm-none-eabi-gcc`. If you search for variations on `arm-gcc` and `gcc-arm` you should find it.
+### Compiling on Linux (Debian / Ubuntu)
+1. Install, update and upgrade apt.
+   ```
+   sudo apt install
+   sudo apt update
+   sudo apt upgrade
+   ```
 
-Also install git, and xxd (which is normally packaged as part of Vim, but on Arch it's available standalone in the AUR). If you don't already have it, install `make` which will be part of the essential build tools (`build-essential` on Debian, `base-devel` on Arch).
+2. Install the ARM GCC toolchain. On Ubuntu and Debian, the package name is `gcc-arm-none-eabi` 
+   ```
+   sudo apt-get install gcc-arm-none-eabi
+   ```
+
+3. If you don't already have it, install `make` which will be part of the essential build tools (`build-essential` on Debian, `base-devel` on Arch).
+   ```
+   sudo apt install make
+   ```
+
+4. Clone the repo, `cd` into it and run `make` to compile. (Reminder: see the note about credentials above under Detailed compilation instructions about cloning the repo)
+    ```
+    git clone https://github.com/mitxela/flash-synth
+    cd flash-synth
+    make
+    ```
+
+If everything worked, you should now have a `build` folder, containing `flash-synth.bin`, along with `flash-synth.pgm` (the memory preview image) and a whole load of intermediate build files.
+
+The file named `flash-synth.bin` is the compiled firmware file.
+
+If using WSL2, see the extra step below for copying the binary file from the virtual machine to your Windows file system.
+
+### Compiling on Arch Linux
+Infuriatingly, the ARM GCC toolchain is inconsistently named in different places. On Arch, the package name is `arm-none-eabi-gcc`.
+
+You will also need to install git and xxd (which is normally packaged as part of Vim, but on Arch it's also available standalone in the AUR). If you don't already have it, install `make` which will be part of the essential build tools (`build-essential` on Debian, `base-devel` on Arch).
+```
+sudo pacman -S base-devel arm-none-eabi-gcc git vim
+```
 
 Then clone the repo, `cd` into it and run `make` to compile.
 
-### Compiling on Windows
+### Compiling on Windows (WSL)
 
-There are lots of ways of doing this, when I started I used mingw, later I compiled using WSL. There are two versions of WSL, I've only ever used version 1 but the instructions should be the same for WSL 2.
+WSL gives you a Linux installation on windows. Currently by default this means Ubuntu.
 
-WSL gives you a linux installation on windows. This could be Ubuntu, Debian, or whatever. WSL is apparently available in the windows store, but if you want WSL 1 you need to install it manually. Once installed, the compilation instructions are identical to building on Linux.
+There are two versions of WSL, the instructions are the same for either version. The main differences between the versions are file handling and speed. WSL2 is installed by default using the instructions below.
+
+Do a Windows search for "command prompt" (you __must__ do this to run as administrator). Right-click on the result and choose "Run as administrator", then type:
+```
+wsl --install
+```
+
+Once installed, the compilation instructions are identical to building on Linux (see above Compiling on Debian / Ubuntu).
+
+If you want to work with this file under Windows, you will need to copy the binary from the virtual machine to your Windows file system. Note that this is __not__ done in WSL/Linux, it is done using Windows PowerShell or command prompt. Below, we copy the file to the desktop.
+
+Open a command prompt as Administrator again then type:
+```
+copy \\$wsl\Ubuntu\home\<your-wsl-linux-username>\flash-synth\build\flash-synth.bin C:\Users\<your-windows-username>\Desktop
+```
+
+Note: if you are using WSL 1, the drives are mounted within the environment, the C: drive is at `/mnt/c/` so to do the above in a WSL 1 terminal:
+```
+cp build/flash-synth.bin /mnt/c/Users/<username>/Desktop
+```
+However, if using WSL 1 I would recommend simply cloning into a folder on the C: drive to begin with, e.g.
+```
+cd /mnt/c/Users/<username>/Documents
+git clone https://github.com/mitxela/flash-synth
+cd flash-synth
+make
+```
+
+### Compiling on Windows (MSYS2)
 
 If you're not interested in WSL then the best way to compile is probably MSYS2. I really like MSYS2, it uses pacman (as in Arch Linux) and generally works very well. Here's some step-by-step instructions:
 
@@ -138,11 +173,17 @@ If you're not interested in WSL then the best way to compile is probably MSYS2. 
    ```
    (the `xxd` package is bundled with vim)
 
+   2.5 Extra step: On my MSYS install, the tools were installed to somewhere that wasn't included in PATH. Try running `arm-none-eabi-gcc` on its own - if you get "fatal error: no input files" then it's working. If you get "command not found" then you need to add it to your PATH. The simplest way is to run this command once:
+   ```
+   echo 'export PATH=/mingw64/bin:$PATH' >> ~/.bashrc
+   ```
+   and then restart the MSYS terminal.
+
 3. Clone this repo. MSYS puts the C: drive at `/c/` (Whereas WSL puts the C: drive at `/mnt/c/`) but you can just clone into the msys home directory if you prefer, which is wherever you installed it (e.g. `C:\msys64\home\User`)
    ```
    git clone https://github.com/mitxela/flash-synth.git
    ```
-   Note: if this github repo is private, you will need to authenticate. Github no longer allows password auth for cloning so you will need to import (or generate) an SSH key for the MSYS environment, and add the public part to your github profile. There are numerous guides online for how to do this. If/when we make this repo public, no extra steps here would be needed.
+   (Reminder: see the note about credentials above under Detailed compilation instructions)
 
 4. Enter the directory by typing 
    ```
@@ -166,11 +207,3 @@ and then
 make
 ```
 It will only re-compile the bits needed. If you want to recompile from scratch, run `make clean` first.
-
-### Development
-
-If you have a development board attached, you can compile the code and load it onto the dev board in one step by typing `make flash`, or the variants `make flash-mingw` or `make flash-stl`. It will depend on your environment and what flashing tools you have installed. I mostly used the official ST-LINK Utility, which is now apparently deprecated. On Linux there is a version simply called stlink.
-
-If you look in the Makefile, towards the end, you can see the commands being invoked by the variants of `make flash`. You may need to edit one of them to get it to work for you, or I may need to add another one for whatever the current accepted way of flashing dev boards is.
-
-I remember there are different versions of the ST-LINK Utility, the most widely distributed executable is an older version that doesn't recognise the STM32L432. If you search properly you should be able to find a version which supports it.
