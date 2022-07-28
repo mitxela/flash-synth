@@ -1,5 +1,11 @@
 # Flash Synth
 
+## About
+
+This source code is offered to allow users to modify and share custom firmware versions for use exclusively with the FLASH synthesizer, manufactured by and sold by [H-Pi Instruments](https://hpi.zentral.zone/flash). The code is not intended for use with any other hardware (clones or derivatives remain forbidden). We offer this code with no warranties or guarantees, and with no technical support concerning firmware programming. Use at your own risk. To share your modified compiled firmware file with other users, use the function within [UTE](https://hpi.zentral.zone/ute) to convert the .bin file into a .uboothex file (see the latest version of the FLASH synth documentation for instructions on how to do this). The .uboothex file can then be sent to H-Pi Instruments for inclusion in an online user firmware archive.
+
+## Summary
+
 Background reading: https://mitxela.com/projects/flash_synth
 
 The processor is an STM32L432KC, running at 64MHz (determined experimentally to give the best performance when powered by MIDI). The chip has 256kB of flash memory and 64kB of RAM.
@@ -86,8 +92,6 @@ In the build folder, a .pgm file is generated which gives a visual overview of p
 
 ## Detailed compilation instructions
 
-Note: since this github repo is currently private, you need to authenticate to be able to clone it. Github no longer allows password auth for cloning so you will need to import (or generate) an SSH key, and add the public part to your github profile. There are numerous guides online for how to do this. If/when we make this repo public, this won't be needed.
-
 ### Compiling on Linux (Debian / Ubuntu)
 1. Install, update and upgrade apt.
    ```
@@ -106,7 +110,7 @@ Note: since this github repo is currently private, you need to authenticate to b
    sudo apt install make
    ```
 
-4. Clone the repo, `cd` into it and run `make` to compile. (Reminder: see the note about credentials above under Detailed compilation instructions about cloning the repo)
+4. Clone the repo, `cd` into it and run `make` to compile.
     ```
     git clone https://github.com/mitxela/flash-synth
     cd flash-synth
@@ -183,7 +187,6 @@ If you're not interested in WSL then the best way to compile is probably MSYS2. 
    ```
    git clone https://github.com/mitxela/flash-synth.git
    ```
-   (Reminder: see the note about credentials above under Detailed compilation instructions)
 
 4. Enter the directory by typing 
    ```
